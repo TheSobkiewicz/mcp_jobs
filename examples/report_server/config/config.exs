@@ -9,8 +9,8 @@ config :report_server, ReportServer.Repo,
 config :report_server, Oban,
   repo: ReportServer.Repo,
   queues: [reports: 5],
-  plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPOban.Cleaner}]}]
+  plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPO.Cleaner}]}]
 
-config :mcp_oban, task_retention: :timer.hours(24)
+config :mcpo, task_retention: :timer.hours(24)
 
 config :logger, level: :warning

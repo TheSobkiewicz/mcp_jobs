@@ -1,4 +1,4 @@
-defmodule MCPOban do
+defmodule MCPO do
   @moduledoc """
   Runs MCP tasks as Oban jobs.
 
@@ -15,25 +15,25 @@ defmodule MCPOban do
     * `{:error, reason}`: Oban retries the job and the task stays `:working`.
 
   The result is stored as JSON, so atom keys come back as strings. Oban marks
-  the job completed before MCPOban saves the result. If the node stops between
+  the job completed before MCPO saves the result. If the node stops between
   these two steps, the task becomes `:completed` with no result.
 
-  MCPOban does not implement the MCP protocol. An MCP server adapter translates
+  MCPO does not implement the MCP protocol. An MCP server adapter translates
   these functions into MCP messages.
 
   ## Options
 
   All functions take an `:oban` option with the name of the Oban instance. The
-  default is `Oban`, or the value of `config :mcp_oban, oban: MyApp.Oban`.
-  MCPOban uses the repo and prefix of that Oban instance.
+  default is `Oban`, or the value of `config :mcpo, oban: MyApp.Oban`.
+  MCPO uses the repo and prefix of that Oban instance.
   """
 
   import Ecto.Query, only: [where: 3]
 
-  alias MCPOban.Repository
-  alias MCPOban.Status
-  alias MCPOban.Task
-  alias MCPOban.Telemetry
+  alias MCPO.Repository
+  alias MCPO.Status
+  alias MCPO.Task
+  alias MCPO.Telemetry
 
   @cancellable_states ~w(available scheduled retryable)
 
@@ -254,7 +254,7 @@ defmodule MCPOban do
 
   defp config(opts) do
     opts
-    |> Keyword.get_lazy(:oban, fn -> Application.get_env(:mcp_oban, :oban, Oban) end)
+    |> Keyword.get_lazy(:oban, fn -> Application.get_env(:mcpo, :oban, Oban) end)
     |> Oban.config()
   end
 

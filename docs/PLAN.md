@@ -1,4 +1,4 @@
-# MCPOban implementation plan
+# MCPO implementation plan
 
 ## Facts that shape the design
 
@@ -15,15 +15,15 @@
 
 | Module | Job |
 |---|---|
-| `MCPOban` | Public API: `enqueue/3`, `status/1`, `cancel/1`, `cancelled?/1` |
-| `MCPOban.Task` | Ecto schema for `mcp_oban_tasks` |
-| `MCPOban.Repository` | All queries. Each status change is a conditional update (`WHERE status = 'working'`). |
-| `MCPOban.Worker` | `use MCPOban.Worker`. You write `run/1`. The wrapper saves the result. |
-| `MCPOban.Telemetry` | Listens to Oban events. Sends `[:mcp_oban, :task, ...]` events. |
-| `MCPOban.Migration` | `up/0` and `down/0`, used from the host app's migration (the same pattern as Oban) |
-| `MCPOban.Cleaner` | Oban worker that deletes old terminal tasks. The host schedules it with Oban Cron. |
+| `MCPO` | Public API: `enqueue/3`, `status/1`, `cancel/1`, `cancelled?/1` |
+| `MCPO.Task` | Ecto schema for `mcpo_tasks` |
+| `MCPO.Repository` | All queries. Each status change is a conditional update (`WHERE status = 'working'`). |
+| `MCPO.Worker` | `use MCPO.Worker`. You write `run/1`. The wrapper saves the result. |
+| `MCPO.Telemetry` | Listens to Oban events. Sends `[:mcpo, :task, ...]` events. |
+| `MCPO.Migration` | `up/0` and `down/0`, used from the host app's migration (the same pattern as Oban) |
+| `MCPO.Cleaner` | Oban worker that deletes old terminal tasks. The host schedules it with Oban Cron. |
 
-### Table `mcp_oban_tasks`
+### Table `mcpo_tasks`
 
 - `task_id`: string, unique index
 - `oban_job_id`: bigint, index, no foreign key (Oban's pruner deletes jobs)
@@ -47,17 +47,17 @@
 
 ## Adapters (optional dependencies)
 
-- `MCPOban.ExMCP`: implements `ExMCP.Tasks.Store` on the table, plus a helper to call from `handle_call_tool/3`.
-- `MCPOban.FastestMCP`: a later step. Its process model conflicts with Oban, so it needs a proxy handler.
+- `MCPO.ExMCP`: implements `ExMCP.Tasks.Store` on the table, plus a helper to call from `handle_call_tool/3`.
+- `MCPO.FastestMCP`: a later step. Its process model conflicts with Oban, so it needs a proxy handler.
 
 ## Build order
 
 Each step ends with passing tests.
 
 1. Test setup: Postgres repo, Oban in `:manual` testing mode, `Ecto.Adapters.SQL.Sandbox`
-2. Migration and `MCPOban.Task` schema
+2. Migration and `MCPO.Task` schema
 3. `enqueue/3` with duplicate protection
-4. `MCPOban.Worker` with success and retry tests
+4. `MCPO.Worker` with success and retry tests
 5. Telemetry handler with final failure tests
 6. `cancel/1` and `cancelled?/1`
 7. Race tests: complete versus cancel, discard versus cancel
@@ -70,7 +70,7 @@ Each step ends with passing tests.
 
 1. **Running job on cancel:** `Oban.cancel_job` kills the process. Pick one:
    - (a) Kill the process.
-   - (b) Only mark the task `cancelled`, and let the worker check `MCPOban.cancelled?/1`. This is cooperative.
+   - (b) Only mark the task `cancelled`, and let the worker check `MCPO.cancelled?/1`. This is cooperative.
    - (c) Cooperative by default, with an option to kill.
 2. **MCP version:** support only v2 (current spec, supported by ExMCP), or v1 too?
 3. **FastestMCP:** include it in the MVP, or add it after the ExMCP adapter works?
@@ -89,6 +89,6 @@ Each step ends with passing tests.
 
 ## Interface simplification (2026-10-02)
 
-- Removed `MCPOban.Worker`. Workers are plain `Oban.Worker` modules. The telemetry handler saves the `perform/1` return value. Trade-off: if the node stops after Oban marks the job completed and before the result is saved, the task is completed with no result.
+- Removed `MCPO.Worker`. Workers are plain `Oban.Worker` modules. The telemetry handler saves the `perform/1` return value. Trade-off: if the node stops after Oban marks the job completed and before the result is saved, the task is completed with no result.
 - Public API is `enqueue/3`, `status/2`, `get/2`, `cancel/2`, `cancelled?/1`.
-- `use MCPOban.ExMCP` sets up the ExMCP handler and imports `create_task/4`.
+- `use MCPO.ExMCP` sets up the ExMCP handler and imports `create_task/4`.

@@ -20,7 +20,7 @@ defmodule ReportServer.MixProject do
 
   defp deps do
     [
-      {:mcp_oban, path: "../.."},
+      {:mcpo, path: "../.."},
       {:ex_mcp, "~> 1.5"},
       {:oban, "~> 2.24"},
       {:postgrex, "~> 0.22"}

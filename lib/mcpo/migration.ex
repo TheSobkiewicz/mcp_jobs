@@ -1,14 +1,14 @@
-defmodule MCPOban.Migration do
+defmodule MCPO.Migration do
   @moduledoc """
-  Creates the `mcp_oban_tasks` table.
+  Creates the `mcpo_tasks` table.
 
   Call it from a migration in your application:
 
-      defmodule MyApp.Repo.Migrations.AddMCPObanTasks do
+      defmodule MyApp.Repo.Migrations.AddMCPOTasks do
         use Ecto.Migration
 
-        def up, do: MCPOban.Migration.up()
-        def down, do: MCPOban.Migration.down()
+        def up, do: MCPO.Migration.up()
+        def down, do: MCPO.Migration.down()
       end
 
   The table must be in the same prefix as the Oban tables. Pass `prefix: "..."`
@@ -21,9 +21,9 @@ defmodule MCPOban.Migration do
   @spec up(keyword()) :: :ok
   def up(opts \\ []) do
     prefix = Keyword.get(opts, :prefix, "public")
-    statuses = Enum.map_join(MCPOban.Task.statuses(), ", ", &"'#{&1}'")
+    statuses = Enum.map_join(MCPO.Task.statuses(), ", ", &"'#{&1}'")
 
-    create_if_not_exists table(:mcp_oban_tasks, prefix: prefix) do
+    create_if_not_exists table(:mcpo_tasks, prefix: prefix) do
       add :task_id, :string, null: false
       add :oban_job_id, :bigint
       add :worker, :string, null: false
@@ -36,11 +36,11 @@ defmodule MCPOban.Migration do
       timestamps(type: :utc_datetime_usec)
     end
 
-    create_if_not_exists unique_index(:mcp_oban_tasks, [:task_id], prefix: prefix)
-    create_if_not_exists index(:mcp_oban_tasks, [:oban_job_id], prefix: prefix)
-    create_if_not_exists index(:mcp_oban_tasks, [:status, :updated_at], prefix: prefix)
+    create_if_not_exists unique_index(:mcpo_tasks, [:task_id], prefix: prefix)
+    create_if_not_exists index(:mcpo_tasks, [:oban_job_id], prefix: prefix)
+    create_if_not_exists index(:mcpo_tasks, [:status, :updated_at], prefix: prefix)
 
-    create constraint(:mcp_oban_tasks, :mcp_oban_tasks_status_check,
+    create constraint(:mcpo_tasks, :mcpo_tasks_status_check,
              check: "status IN (#{statuses})",
              prefix: prefix
            )
@@ -53,7 +53,7 @@ defmodule MCPOban.Migration do
   def down(opts \\ []) do
     prefix = Keyword.get(opts, :prefix, "public")
 
-    drop_if_exists table(:mcp_oban_tasks, prefix: prefix)
+    drop_if_exists table(:mcpo_tasks, prefix: prefix)
 
     :ok
   end

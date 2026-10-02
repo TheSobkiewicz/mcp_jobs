@@ -1,13 +1,13 @@
-defmodule MCPOban.Telemetry do
+defmodule MCPO.Telemetry do
   @moduledoc """
-  Telemetry events that MCPOban sends, and the Oban events it listens to.
+  Telemetry events that MCPO sends, and the Oban events it listens to.
 
   ## Events
 
-    * `[:mcp_oban, :task, :started]`: a task and its Oban job are inserted.
-    * `[:mcp_oban, :task, :completed]`
-    * `[:mcp_oban, :task, :failed]`
-    * `[:mcp_oban, :task, :cancelled]`
+    * `[:mcpo, :task, :started]`: a task and its Oban job are inserted.
+    * `[:mcpo, :task, :completed]`
+    * `[:mcpo, :task, :failed]`
+    * `[:mcpo, :task, :cancelled]`
 
   Measurements: `:system_time` for `:started`. `:duration` for the other events,
   in native time units, from task insert to the status change.
@@ -16,7 +16,7 @@ defmodule MCPOban.Telemetry do
 
   ## Oban events
 
-  MCPOban attaches to `[:oban, :job, :stop]` and `[:oban, :job, :exception]` when
+  MCPO attaches to `[:oban, :job, :stop]` and `[:oban, :job, :exception]` when
   its application starts. It changes a task only when Oban reports a final state
   (`:success`, `:discard` or `:cancelled`). A `:failure` state is a retry, so the
   task stays `:working`.
@@ -28,9 +28,9 @@ defmodule MCPOban.Telemetry do
 
   require Logger
 
-  alias MCPOban.Task
+  alias MCPO.Task
 
-  @handler_id "mcp-oban-job-handler"
+  @handler_id "mcpo-job-handler"
 
   @doc false
   @spec attach() :: :ok | {:error, :already_exists}
@@ -52,13 +52,13 @@ defmodule MCPOban.Telemetry do
       )
       when state in [:success, :discard, :cancelled] do
     case state do
-      :success -> MCPOban.transition(conf, task_id, :completed, result: result(meta))
-      :discard -> MCPOban.transition(conf, task_id, :failed, error: error(meta))
-      :cancelled -> MCPOban.transition(conf, task_id, :cancelled, [])
+      :success -> MCPO.transition(conf, task_id, :completed, result: result(meta))
+      :discard -> MCPO.transition(conf, task_id, :failed, error: error(meta))
+      :cancelled -> MCPO.transition(conf, task_id, :cancelled, [])
     end
   rescue
     exception ->
-      Logger.error("[MCPOban] telemetry handler failed: " <> Exception.message(exception))
+      Logger.error("[MCPO] telemetry handler failed: " <> Exception.message(exception))
   end
 
   def handle_event(_event, _measurements, _meta, _config), do: :ok
@@ -67,7 +67,7 @@ defmodule MCPOban.Telemetry do
   @spec emit(Task.t()) :: :ok
   def emit(%Task{status: :working} = task) do
     :telemetry.execute(
-      [:mcp_oban, :task, :started],
+      [:mcpo, :task, :started],
       %{system_time: System.system_time()},
       metadata(task)
     )
@@ -79,7 +79,7 @@ defmodule MCPOban.Telemetry do
       |> DateTime.diff(inserted_at, :microsecond)
       |> System.convert_time_unit(:microsecond, :native)
 
-    :telemetry.execute([:mcp_oban, :task, status], %{duration: duration}, metadata(task))
+    :telemetry.execute([:mcpo, :task, status], %{duration: duration}, metadata(task))
   end
 
   defp metadata(%Task{task_id: task_id, oban_job_id: job_id, worker: worker}) do

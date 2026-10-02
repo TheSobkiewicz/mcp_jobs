@@ -1,16 +1,16 @@
 if Code.ensure_loaded?(ExMCP.Tasks.Store) do
-  defmodule MCPOban.ExMCP.Store do
+  defmodule MCPO.ExMCP.Store do
     @moduledoc """
-    An `ExMCP.Tasks.Store` that keeps tasks in the `mcp_oban_tasks` table.
+    An `ExMCP.Tasks.Store` that keeps tasks in the `mcpo_tasks` table.
 
-    See `MCPOban.ExMCP` for the setup. Each task is bound to its ExMCP owner.
+    See `MCPO.ExMCP` for the setup. Each task is bound to its ExMCP owner.
     A request from another owner gets `:not_found_or_unauthorized`.
     """
 
     @behaviour ExMCP.Tasks.Store
 
     alias ExMCP.Tasks.Task, as: MCPTask
-    alias MCPOban.Task
+    alias MCPO.Task
 
     @internal_error -32_603
 
@@ -34,7 +34,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       ]
 
       with {:ok, worker} <- Keyword.fetch(opts, :worker),
-           {:ok, task} <- MCPOban.enqueue(worker, arguments, enqueue_opts ++ oban_opts(opts)),
+           {:ok, task} <- MCPO.enqueue(worker, arguments, enqueue_opts ++ oban_opts(opts)),
            :ok <- authorize(task, owner) do
         {:ok, to_mcp_task(task)}
       else
@@ -59,7 +59,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       with {:ok, _task} <- fetch_authorized(task_id, owner, opts) do
         cancel_opts = [kill: Keyword.get(opts, :kill, false)] ++ oban_opts(opts)
 
-        case MCPOban.cancel(task_id, cancel_opts) do
+        case MCPO.cancel(task_id, cancel_opts) do
           {:ok, _task} -> :ok
           {:error, :terminal} -> :ok
           {:error, :not_found} -> {:error, :not_found_or_unauthorized}
@@ -91,14 +91,14 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     end
 
     defp apply_transition(task_id, {:complete, result}, opts),
-      do: MCPOban.complete(task_id, result, opts)
+      do: MCPO.complete(task_id, result, opts)
 
-    defp apply_transition(task_id, {:fail, error}, opts), do: MCPOban.fail(task_id, error, opts)
-    defp apply_transition(task_id, :cancelled, opts), do: MCPOban.cancel(task_id, opts)
+    defp apply_transition(task_id, {:fail, error}, opts), do: MCPO.fail(task_id, error, opts)
+    defp apply_transition(task_id, :cancelled, opts), do: MCPO.cancel(task_id, opts)
     defp apply_transition(_task_id, _operation, _opts), do: {:error, :invalid_transition}
 
     defp fetch_authorized(task_id, owner, opts) do
-      with {:ok, task} <- MCPOban.get(task_id, oban_opts(opts)),
+      with {:ok, task} <- MCPO.get(task_id, oban_opts(opts)),
            :ok <- authorize(task, owner) do
         {:ok, task}
       else

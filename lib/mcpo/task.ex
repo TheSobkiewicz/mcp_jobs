@@ -1,4 +1,4 @@
-defmodule MCPOban.Task do
+defmodule MCPO.Task do
   @moduledoc """
   The link between an MCP task and the Oban job that does its work.
 
@@ -26,7 +26,7 @@ defmodule MCPOban.Task do
           updated_at: DateTime.t() | nil
         }
 
-  schema "mcp_oban_tasks" do
+  schema "mcpo_tasks" do
     field :task_id, :string
     field :oban_job_id, :integer
     field :worker, :string

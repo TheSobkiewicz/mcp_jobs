@@ -1,15 +1,15 @@
-defmodule MCPOban.ExMCPTest do
-  use MCPOban.DataCase
+defmodule MCPO.ExMCPTest do
+  use MCPO.DataCase
 
   alias ExMCP.Tasks
   alias ExMCP.Tasks.Extension
-  alias MCPOban.Test.{FailingWorker, SuccessWorker}
+  alias MCPO.Test.{FailingWorker, SuccessWorker}
 
   @owner %{principal_id: "user-1", tenant_id: "tenant-1", audience: "mcp"}
   @other_owner %{principal_id: "user-2", tenant_id: "tenant-1", audience: "mcp"}
 
   defp opts(extra \\ []) do
-    [store: MCPOban.ExMCP.Store, owner: @owner, notify: false] ++ extra
+    [store: MCPO.ExMCP.Store, owner: @owner, notify: false] ++ extra
   end
 
   defp create(worker, arguments) do
@@ -95,7 +95,7 @@ defmodule MCPOban.ExMCPTest do
   test "another owner cannot take over a task ID" do
     {task_id, _created} = create(SuccessWorker, %{"value" => 1})
 
-    other = [store: MCPOban.ExMCP.Store, owner: @other_owner, notify: false]
+    other = [store: MCPO.ExMCP.Store, owner: @other_owner, notify: false]
 
     assert {:error, :already_exists} =
              Tasks.create("generate_report", %{}, [id: task_id, worker: SuccessWorker] ++ other)

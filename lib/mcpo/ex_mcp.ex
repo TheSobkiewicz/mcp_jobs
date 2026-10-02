@@ -1,10 +1,10 @@
 if Code.ensure_loaded?(ExMCP.Tasks.Store) do
-  defmodule MCPOban.ExMCP do
+  defmodule MCPO.ExMCP do
     @moduledoc """
     Runs ExMCP tool calls as Oban jobs.
 
         defmodule MyApp.MCPServer do
-          use MCPOban.ExMCP
+          use MCPO.ExMCP
 
           @impl ExMCP.Server.Handler
           def handle_call_tool("generate_report", arguments, state) do
@@ -12,15 +12,15 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
           end
         end
 
-    `use MCPOban.ExMCP` is `use ExMCP.Server.Handler` with `MCPOban.ExMCP.Store`
+    `use MCPO.ExMCP` is `use ExMCP.Server.Handler` with `MCPO.ExMCP.Store`
     as the task store. It also imports `create_task/4`. The client gets the task
     at once. ExMCP then answers `tasks/get` and `tasks/cancel` from the
-    `mcp_oban_tasks` table.
+    `mcpo_tasks` table.
 
     ## Options
 
     Other `ExMCP.Server.Handler` options are passed on. Put store options in
-    `task_store_opts:`, for example `use MCPOban.ExMCP, task_store_opts: [kill: true]`:
+    `task_store_opts:`, for example `use MCPO.ExMCP, task_store_opts: [kill: true]`:
 
       * `:oban`: the Oban instance name.
       * `:job`: options for `c:Oban.Worker.new/2`.
@@ -29,17 +29,17 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
 
     ## Limits
 
-    The `input_required` status is not supported. MCPOban does not publish
+    The `input_required` status is not supported. MCPO does not publish
     `notifications/tasks`, so clients poll with `tasks/get`.
     """
 
     defmacro __using__(opts) do
-      handler_opts = Keyword.merge([tasks: :store, task_store: MCPOban.ExMCP.Store], opts)
+      handler_opts = Keyword.merge([tasks: :store, task_store: MCPO.ExMCP.Store], opts)
 
       quote do
         use ExMCP.Server.Handler, unquote(handler_opts)
 
-        import MCPOban.ExMCP, only: [create_task: 4]
+        import MCPO.ExMCP, only: [create_task: 4]
       end
     end
 
@@ -49,7 +49,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     """
     defmacro create_task(tool_name, worker, arguments, state) do
       quote do
-        MCPOban.ExMCP.create_task(
+        MCPO.ExMCP.create_task(
           unquote(tool_name),
           unquote(worker),
           unquote(arguments),
@@ -62,7 +62,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @doc """
     Creates a task for `worker`. `opts` are the task store options of the handler.
 
-    Use it when the handler does not `use MCPOban.ExMCP`.
+    Use it when the handler does not `use MCPO.ExMCP`.
     """
     @spec create_task(String.t(), module(), map(), term(), keyword()) ::
             {:ok, map(), term()} | {:error, term(), term()}

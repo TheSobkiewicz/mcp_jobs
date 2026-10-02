@@ -1,4 +1,4 @@
-defmodule MCPO.Test.Migration do
+defmodule ReportServer.Repo.Migrations.AddObanAndMCPO do
   use Ecto.Migration
 
   def up do

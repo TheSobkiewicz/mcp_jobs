@@ -8,7 +8,7 @@ defmodule ReportServer.Workers.GenerateReport do
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"steps" => steps}} = job) do
     Enum.reduce_while(1..steps, :ok, fn _step, :ok ->
-      if MCPOban.cancelled?(job) do
+      if MCPO.cancelled?(job) do
         {:halt, {:cancel, :mcp_task_cancelled}}
       else
         Process.sleep(200)

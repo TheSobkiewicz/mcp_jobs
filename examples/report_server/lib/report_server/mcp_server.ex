@@ -3,7 +3,7 @@ defmodule ReportServer.MCPServer do
   An MCP server with one long running tool. Each call runs as an Oban job.
   """
 
-  use MCPOban.ExMCP
+  use MCPO.ExMCP
 
   @impl ExMCP.Server.Handler
   def handle_list_tools(_cursor, state) do

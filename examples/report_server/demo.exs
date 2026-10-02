@@ -46,6 +46,6 @@ Process.sleep(500)
 wait.(wait, task_id)
 
 Process.sleep(500)
-{:ok, %MCPOban.Task{oban_job_id: job_id}} = MCPOban.get(task_id)
+{:ok, %MCPO.Task{oban_job_id: job_id}} = MCPO.get(task_id)
 %Oban.Job{state: job_state} = ReportServer.Repo.get(Oban.Job, job_id)
 IO.puts("  Oban job state after the worker stopped: #{job_state}")

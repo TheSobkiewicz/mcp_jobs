@@ -1,12 +1,12 @@
-defmodule MCPOban.ExMCPServerTest do
-  use MCPOban.DataCase
+defmodule MCPO.ExMCPServerTest do
+  use MCPO.DataCase
 
   alias ExMCP.Tasks.Extension
 
   setup do
     {:ok, server} =
       ExMCP.Server.HandlerServer.start_link(
-        handler: MCPOban.Test.MCPServer,
+        handler: MCPO.Test.MCPServer,
         transport: :beam,
         protocol_mode: :prefer_modern
       )

@@ -45,12 +45,12 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 
 The plan and its decisions are in `docs/PLAN.md`.
 
-- `MCPOban`: public API (`enqueue/3`, `status/2`, `get/2`, `cancel/2`, `cancelled?/1`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
-- `MCPOban.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
-- Workers are plain `Oban.Worker` modules. `MCPOban.Telemetry` saves the `perform/1` return value as the task result.
-- `MCPOban.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcp_oban, :task, ...]` events.
-- `MCPOban.Application`: attaches the telemetry handler. It starts no processes.
-- `MCPOban.ExMCP` and `MCPOban.ExMCP.Store`: the ExMCP adapter. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
+- `MCPO`: public API (`enqueue/3`, `status/2`, `get/2`, `cancel/2`, `cancelled?/1`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
+- `MCPO.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
+- Workers are plain `Oban.Worker` modules. `MCPO.Telemetry` saves the `perform/1` return value as the task result.
+- `MCPO.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcpo, :task, ...]` events.
+- `MCPO.Application`: attaches the telemetry handler. It starts no processes.
+- `MCPO.ExMCP` and `MCPO.ExMCP.Store`: the ExMCP adapter. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
 - `examples/report_server`: an example app. Run `mix run demo.exs` in it to check the full flow with real Oban queues.
-- MCPOban uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
-- Tests need a local Postgres. `test/test_helper.exs` creates the `mcp_oban_test` database and runs the migrations.
+- MCPO uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
+- Tests need a local Postgres. `test/test_helper.exs` creates the `mcpo_test` database and runs the migrations.

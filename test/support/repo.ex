@@ -1,3 +1,3 @@
-defmodule MCPOban.Test.Repo do
-  use Ecto.Repo, otp_app: :mcp_oban, adapter: Ecto.Adapters.Postgres
+defmodule MCPO.Test.Repo do
+  use Ecto.Repo, otp_app: :mcpo, adapter: Ecto.Adapters.Postgres
 end
