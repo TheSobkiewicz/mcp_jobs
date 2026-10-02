@@ -45,7 +45,7 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 
 The plan and its decisions are in `docs/PLAN.md`.
 
-- `MCPO`: public API (`enqueue/3`, `status/2`, `get/2`, `cancel/2`, `cancelled?/1`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
+- `MCPO`: public API (`enqueue/3`, `status/2`, `get/2`, `await/2`, `cancel/2`, `cancelled?/1`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
 - `MCPO.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
 - Workers are plain `Oban.Worker` modules. `MCPO.Telemetry` saves the `perform/1` return value as the task result.
 - `MCPO.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcpo, :task, ...]` events.

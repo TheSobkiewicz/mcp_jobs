@@ -91,8 +91,30 @@ ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPO table:
 - A failed task returns a JSON-RPC error.
 - Each task is bound to the ExMCP owner (principal, tenant, and audience). Other owners cannot read or cancel it.
 
-Limits:
-- MCPO supports the MCP Tasks extension (spec 2026-07-28). It does not support the older `tasks/list` and `tasks/result` methods.
+### Clients without tasks
+
+Many clients do not support the MCP Tasks extension yet. For example, the MCP Inspector uses the TypeScript SDK, and its latest protocol is `2025-11-25`. For these clients, `create_task/4` waits for the Oban job and returns the tool result directly. The work still runs in Oban, with retries.
+
+- A failed or cancelled job returns a tool result with `"isError": true`.
+- If the job does not finish in `:wait_timeout` (9 seconds by default), MCPO cancels the task and returns an error result.
+- While the call waits, it is blocked. Over HTTP, ExMCP stops a handler call after `:handler_call_timeout` (10 seconds by default). For longer jobs, raise both values:
+
+  ```elixir
+  use MCPO.ExMCP, task_store_opts: [wait_timeout: 60_000]
+
+  # and on the plug:
+  Plug.Cowboy.http(ExMCP.HttpPlug, [handler: MyApp.MCPServer, handler_call_timeout: 65_000], port: 4000)
+  ```
+
+- Over stdio, other requests on the same connection wait.
+
+Declare the tool with `"execution" => %{"taskSupport" => "optional"}`, so that both kinds of client can call it.
+
+A raw ExMCP handler answers `initialize` with no capabilities. Older clients then do not ask for tools. Implement `handle_initialize/2` and return `"capabilities" => %{"tools" => %{}}`. See `examples/report_server/lib/report_server/mcp_server.ex`.
+
+### Limits
+
+- MCPO supports the MCP Tasks extension (spec 2026-07-28). Older clients get the direct result described above, not a task.
 - The `input_required` status is not supported.
 - MCPO does not send `notifications/tasks`, so clients must poll with `tasks/get`.
 
@@ -111,7 +133,7 @@ MCPO.status(task_id)
 MCPO.cancel(task_id)
 ```
 
-To make an adapter for a different MCP server, use `MCPO.enqueue/3`, `MCPO.get/2`, and `MCPO.cancel/2`.
+To make an adapter for a different MCP server, use `MCPO.enqueue/3`, `MCPO.get/2`, and `MCPO.cancel/2`. For clients that cannot poll, `MCPO.await/2` waits until the task is done.
 
 ### Duplicate requests
 
@@ -182,6 +204,14 @@ cd examples/report_server
 mix deps.get
 mix ecto.create && mix ecto.migrate
 mix run demo.exs
+```
+
+To use it from another MCP client, start it over HTTP on port 4000:
+
+```sh
+mix run --no-halt serve.exs
+npx @modelcontextprotocol/inspector --cli http://localhost:4000/ --transport http \
+  --method tools/call --tool-name generate_report --tool-arg steps=3
 ```
 
 ## Development

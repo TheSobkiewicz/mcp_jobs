@@ -110,7 +110,8 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       if stored == normalize_owner(owner), do: :ok, else: {:error, :not_found_or_unauthorized}
     end
 
-    defp normalize_owner(owner) do
+    @doc false
+    def normalize_owner(owner) do
       Map.new(owner, fn {key, value} -> {to_string(key), value} end)
     end
 
@@ -138,19 +139,20 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       }
     end
 
-    defp call_tool_result(%Task{status: :completed, result: nil}), do: %{"content" => []}
+    @doc false
+    def call_tool_result(%Task{status: :completed, result: nil}), do: %{"content" => []}
 
-    defp call_tool_result(%Task{status: :completed, result: %{"content" => _} = result}),
+    def call_tool_result(%Task{status: :completed, result: %{"content" => _} = result}),
       do: result
 
-    defp call_tool_result(%Task{status: :completed, result: result}) do
+    def call_tool_result(%Task{status: :completed, result: result}) do
       %{
         "content" => [%{"type" => "text", "text" => JSON.encode!(result)}],
         "structuredContent" => result
       }
     end
 
-    defp call_tool_result(%Task{}), do: nil
+    def call_tool_result(%Task{}), do: nil
 
     defp rpc_error(%Task{status: :failed, error: %{"code" => _, "message" => _} = error}),
       do: error
@@ -161,7 +163,8 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
 
     defp rpc_error(%Task{}), do: nil
 
-    defp error_message(%{"message" => message}) when is_binary(message), do: message
-    defp error_message(_error), do: "Task failed"
+    @doc false
+    def error_message(%{"message" => message}) when is_binary(message), do: message
+    def error_message(_error), do: "Task failed"
   end
 end

@@ -204,6 +204,23 @@ defmodule MCPOTest do
     end
   end
 
+  describe "await/2" do
+    test "returns the task when it is done" do
+      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})
+      drain()
+
+      assert {:ok, %Task{status: :completed}} = MCPO.await(task_id)
+    end
+
+    test "returns a timeout for a working task and does not cancel it" do
+      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})
+
+      assert {:error, :timeout} = MCPO.await(task_id, timeout: 50, interval: 10)
+      assert {:ok, %{status: :working}} = MCPO.status(task_id)
+      assert {:error, :not_found} = MCPO.await("missing")
+    end
+  end
+
   describe "status/2" do
     test "returns not found for an unknown task" do
       assert {:error, :not_found} = MCPO.status("missing")

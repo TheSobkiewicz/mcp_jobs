@@ -114,6 +114,26 @@ defmodule MCPO do
   end
 
   @doc """
+  Waits until the task is completed, failed or cancelled, and returns it.
+
+  Use it for clients that cannot poll a task. The caller process is blocked
+  while it waits. The task is not cancelled on timeout.
+
+  ## Options
+
+    * `:timeout`: the maximum wait in milliseconds. The default is 5000.
+    * `:interval`: the time between two status checks in milliseconds. The
+      default is 100.
+    * `:oban`: the Oban instance name.
+  """
+  @spec await(String.t(), keyword()) :: {:ok, Task.t()} | {:error, :not_found | :timeout}
+  def await(task_id, opts \\ []) do
+    deadline = System.monotonic_time(:millisecond) + Keyword.get(opts, :timeout, 5_000)
+
+    poll(task_id, deadline, Keyword.get(opts, :interval, 100), opts)
+  end
+
+  @doc """
   Cancels a task.
 
   The task becomes `:cancelled` at once. A job that waits to run is cancelled in
@@ -178,6 +198,23 @@ defmodule MCPO do
 
       :noop ->
         :noop
+    end
+  end
+
+  defp poll(task_id, deadline, interval, opts) do
+    case get(task_id, opts) do
+      {:ok, %Task{status: :working}} ->
+        remaining = deadline - System.monotonic_time(:millisecond)
+
+        if remaining > 0 do
+          Process.sleep(min(interval, remaining))
+          poll(task_id, deadline, interval, opts)
+        else
+          {:error, :timeout}
+        end
+
+      result ->
+        result
     end
   end
 

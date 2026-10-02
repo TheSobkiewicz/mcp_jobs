@@ -92,3 +92,7 @@ Each step ends with passing tests.
 - Removed `MCPO.Worker`. Workers are plain `Oban.Worker` modules. The telemetry handler saves the `perform/1` return value. Trade-off: if the node stops after Oban marks the job completed and before the result is saved, the task is completed with no result.
 - Public API is `enqueue/3`, `status/2`, `get/2`, `cancel/2`, `cancelled?/1`.
 - `use MCPO.ExMCP` sets up the ExMCP handler and imports `create_task/4`.
+
+## Clients without tasks (2026-10-02)
+
+Test with the MCP Inspector (TypeScript SDK 1.29, latest protocol `2025-11-25`) showed that it does not know the MCP Tasks extension. Decision: fallback. When a client does not declare the extension, `MCPO.ExMCP.create_task` waits for the job with `MCPO.await/2` and returns the tool result directly. On `:wait_timeout` the task is cancelled. Tools use `taskSupport: "optional"`.
