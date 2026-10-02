@@ -46,45 +46,44 @@ config :mcp_oban, oban: MyApp.Oban
 
 ## Write a worker
 
-Use `MCPOban.Worker` in place of `Oban.Worker`. Write `run/1` in place of `perform/1`:
+A worker is a plain `Oban.Worker`. It does not need to know about MCP:
 
 ```elixir
 defmodule MyApp.Workers.GenerateReport do
-  use MCPOban.Worker, queue: :reports, max_attempts: 3
+  use Oban.Worker, queue: :reports, max_attempts: 3
 
-  @impl MCPOban.Worker
-  def run(%Oban.Job{args: %{"report_id" => report_id}}) do
+  @impl Oban.Worker
+  def perform(%Oban.Job{args: %{"report_id" => report_id}}) do
     {:ok, %{"url" => MyApp.Reports.generate(report_id)}}
   end
 end
 ```
 
+The return value of `perform/1` becomes the task result:
+
 - `{:ok, map}` completes the task and saves the map as the result.
+- `{:ok, value}` saves `%{"value" => value}`.
 - `:ok` completes the task with no result.
 - `{:error, reason}` makes Oban retry the job. The task stays `working`.
 
-The result is stored as JSON, so atom keys come back as strings.
+The result is stored as JSON, so atom keys come back as strings. The result must be JSON-safe: for example, no tuples or PIDs.
 
-A plain `Oban.Worker` also works. Its task completes with no result, or you can call `MCPOban.complete/3` yourself.
+> **Note:** Oban marks the job `completed` first, and then MCPOban saves the result from the Oban telemetry event. If the node stops between these two steps, the task becomes `completed` with no result.
 
 ## Use with ExMCP
 
 ```elixir
 defmodule MyApp.MCPServer do
-  use ExMCP.Server.Handler, tasks: :store, task_store: MCPOban.ExMCP.Store
+  use MCPOban.ExMCP
 
   @impl ExMCP.Server.Handler
   def handle_call_tool("generate_report", arguments, state) do
-    MCPOban.ExMCP.create_task(
-      "generate_report",
-      MyApp.Workers.GenerateReport,
-      arguments,
-      state,
-      __task_store_options__()
-    )
+    create_task("generate_report", MyApp.Workers.GenerateReport, arguments, state)
   end
 end
 ```
+
+`use MCPOban.ExMCP` is `use ExMCP.Server.Handler` with the MCPOban task store. It also imports `create_task/4`. Other handler options are passed on to ExMCP.
 
 ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPOban table:
 
@@ -126,7 +125,7 @@ Give the MCP task ID as `task_id:`. If a task with this ID already exists, `enqu
 - **The job is running:** Oban does not stop it. The BEAM cannot safely stop any code at any point, so the worker must stop by itself. A long worker should check `MCPOban.cancelled?/1` between steps:
 
   ```elixir
-  def run(%Oban.Job{} = job) do
+  def perform(%Oban.Job{} = job) do
     Enum.reduce_while(steps(), :ok, fn step, :ok ->
       if MCPOban.cancelled?(job) do
         {:halt, {:cancel, :mcp_task_cancelled}}
@@ -142,7 +141,7 @@ Give the MCP task ID as `task_id:`. If a task with this ID already exists, `enqu
 
 - **Kill the job:** `MCPOban.cancel(task_id, kill: true)` makes Oban kill a running job. The process stops at once and cannot clean up.
 
-With ExMCP, set `task_store_opts: [kill: true]` on the handler to kill running jobs on `tasks/cancel`.
+With ExMCP, use `use MCPOban.ExMCP, task_store_opts: [kill: true]` to kill running jobs on `tasks/cancel`.
 
 ## Races
 

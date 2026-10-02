@@ -9,7 +9,8 @@ defmodule MCPObanTest do
     FailingWorker,
     FlakyWorker,
     PlainWorker,
-    SuccessWorker
+    SuccessWorker,
+    ValueWorker
   }
 
   describe "enqueue/3" do
@@ -77,7 +78,24 @@ defmodule MCPObanTest do
       assert is_integer(duration) and is_integer(job_id)
     end
 
-    test "completes the task of a plain Oban worker without a result" do
+    test "saves the result in the task when perform/1 returns it" do
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 3})
+
+      drain()
+
+      assert %Task{status: :completed, result: %{"value" => 3}} =
+               Repo.get_by(Task, task_id: task_id)
+    end
+
+    test "wraps a result that is not a map" do
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(ValueWorker, %{})
+
+      drain()
+
+      assert {:ok, %{status: :completed, result: %{"value" => "done"}}} = MCPOban.status(task_id)
+    end
+
+    test "completes the task without a result when perform/1 returns :ok" do
       {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(PlainWorker, %{})
 
       drain()
@@ -136,7 +154,6 @@ defmodule MCPObanTest do
       assert {:ok, %Task{status: :cancelled}} = MCPOban.cancel(task_id)
       assert {:ok, %{status: :cancelled}} = MCPOban.status(task_id)
       assert %Oban.Job{state: "cancelled"} = Repo.get(Oban.Job, job_id)
-      assert MCPOban.cancelled?(task_id, [])
 
       assert_received {:telemetry, [:mcp_oban, :task, :cancelled], _, %{task_id: ^task_id}}
     end
@@ -151,8 +168,8 @@ defmodule MCPObanTest do
 
       assert %Oban.Job{state: "executing"} = Repo.get(Oban.Job, job_id)
 
-      assert {:cancel, :mcp_task_cancelled} =
-               perform_job(SuccessWorker, %{value: 1}, meta: %{mcp_task_id: task_id})
+      Repo.update_all(where(Oban.Job, id: ^job_id), set: [state: "available"])
+      assert %{success: 1} = drain()
 
       assert {:ok, %Task{status: :cancelled, result: nil}} = MCPOban.get(task_id)
     end
@@ -183,7 +200,7 @@ defmodule MCPObanTest do
 
       assert {:error, :terminal} = MCPOban.cancel(task_id)
       assert {:error, :not_found} = MCPOban.cancel("missing")
-      refute MCPOban.cancelled?(task_id, [])
+      assert {:ok, %{status: :completed}} = MCPOban.status(task_id)
     end
   end
 

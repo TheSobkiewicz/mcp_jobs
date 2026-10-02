@@ -6,6 +6,18 @@ defmodule MCPOban do
   job. The MCP server reads the task with `status/2` or `get/2`, and cancels it
   with `cancel/2`.
 
+  Workers are plain `Oban.Worker` modules. The return value of `perform/1`
+  becomes the task result:
+
+    * `{:ok, map}`: the task becomes `:completed` with the map as its result.
+    * `{:ok, value}`: the result is `%{"value" => value}`.
+    * `:ok`: the task becomes `:completed` with no result.
+    * `{:error, reason}`: Oban retries the job and the task stays `:working`.
+
+  The result is stored as JSON, so atom keys come back as strings. Oban marks
+  the job completed before MCPOban saves the result. If the node stops between
+  these two steps, the task becomes `:completed` with no result.
+
   MCPOban does not implement the MCP protocol. An MCP server adapter translates
   these functions into MCP messages.
 
@@ -141,29 +153,14 @@ defmodule MCPOban do
 
   def cancelled?(%Oban.Job{}), do: false
 
-  @doc "Returns true when the task with this ID is cancelled."
-  @spec cancelled?(String.t(), keyword()) :: boolean()
-  def cancelled?(task_id, opts) when is_binary(task_id) do
-    match?(%Task{status: :cancelled}, Repository.get(config(opts), task_id))
-  end
-
-  @doc """
-  Completes a working task with a result.
-
-  `MCPOban.Worker` calls it for you. Use it when you write a plain `Oban.Worker`.
-  Returns `{:error, :terminal}` when the task is not `:working`.
-  """
+  @doc false
   @spec complete(String.t(), map() | nil, keyword()) ::
           {:ok, Task.t()} | {:error, :not_found | :terminal}
   def complete(task_id, result, opts \\ []) when is_map(result) or is_nil(result) do
     finish(task_id, :completed, [result: result], opts)
   end
 
-  @doc """
-  Fails a working task with an error.
-
-  Returns `{:error, :terminal}` when the task is not `:working`.
-  """
+  @doc false
   @spec fail(String.t(), map(), keyword()) ::
           {:ok, Task.t()} | {:error, :not_found | :terminal}
   def fail(task_id, error, opts \\ []) when is_map(error) do

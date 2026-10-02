@@ -86,3 +86,9 @@ Each step ends with passing tests.
 - Done: steps 1 to 9 (core library and its tests).
 - Done: step 10 (ExMCP adapter, `examples/report_server`) and step 11 (README).
 - Next: FastestMCP adapter.
+
+## Interface simplification (2026-10-02)
+
+- Removed `MCPOban.Worker`. Workers are plain `Oban.Worker` modules. The telemetry handler saves the `perform/1` return value. Trade-off: if the node stops after Oban marks the job completed and before the result is saved, the task is completed with no result.
+- Public API is `enqueue/3`, `status/2`, `get/2`, `cancel/2`, `cancelled?/1`.
+- `use MCPOban.ExMCP` sets up the ExMCP handler and imports `create_task/4`.

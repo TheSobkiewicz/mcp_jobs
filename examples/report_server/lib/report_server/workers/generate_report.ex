@@ -3,10 +3,10 @@ defmodule ReportServer.Workers.GenerateReport do
   Builds a report in steps. It checks for cancellation before each step.
   """
 
-  use MCPOban.Worker, queue: :reports, max_attempts: 3
+  use Oban.Worker, queue: :reports, max_attempts: 3
 
-  @impl MCPOban.Worker
-  def run(%Oban.Job{args: %{"steps" => steps}} = job) do
+  @impl Oban.Worker
+  def perform(%Oban.Job{args: %{"steps" => steps}} = job) do
     Enum.reduce_while(1..steps, :ok, fn _step, :ok ->
       if MCPOban.cancelled?(job) do
         {:halt, {:cancel, :mcp_task_cancelled}}

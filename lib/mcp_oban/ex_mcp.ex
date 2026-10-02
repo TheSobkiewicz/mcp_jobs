@@ -3,30 +3,24 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @moduledoc """
     Runs ExMCP tool calls as Oban jobs.
 
-    Configure the handler with `MCPOban.ExMCP.Store`, and create the task in
-    `handle_call_tool/3`:
-
         defmodule MyApp.MCPServer do
-          use ExMCP.Server.Handler, tasks: :store, task_store: MCPOban.ExMCP.Store
+          use MCPOban.ExMCP
 
           @impl ExMCP.Server.Handler
           def handle_call_tool("generate_report", arguments, state) do
-            MCPOban.ExMCP.create_task(
-              "generate_report",
-              MyApp.Workers.GenerateReport,
-              arguments,
-              state,
-              __task_store_options__()
-            )
+            create_task("generate_report", MyApp.Workers.GenerateReport, arguments, state)
           end
         end
 
-    The client gets the task at once. ExMCP then answers `tasks/get` and
-    `tasks/cancel` from the `mcp_oban_tasks` table.
+    `use MCPOban.ExMCP` is `use ExMCP.Server.Handler` with `MCPOban.ExMCP.Store`
+    as the task store. It also imports `create_task/4`. The client gets the task
+    at once. ExMCP then answers `tasks/get` and `tasks/cancel` from the
+    `mcp_oban_tasks` table.
 
     ## Options
 
-    Put these in `task_store_opts:` of the handler, or in the last argument:
+    Other `ExMCP.Server.Handler` options are passed on. Put store options in
+    `task_store_opts:`, for example `use MCPOban.ExMCP, task_store_opts: [kill: true]`:
 
       * `:oban`: the Oban instance name.
       * `:job`: options for `c:Oban.Worker.new/2`.
@@ -39,10 +33,40 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     `notifications/tasks`, so clients poll with `tasks/get`.
     """
 
-    @doc "Creates a task for `worker` and returns the ExMCP tool call result."
+    defmacro __using__(opts) do
+      handler_opts = Keyword.merge([tasks: :store, task_store: MCPOban.ExMCP.Store], opts)
+
+      quote do
+        use ExMCP.Server.Handler, unquote(handler_opts)
+
+        import MCPOban.ExMCP, only: [create_task: 4]
+      end
+    end
+
+    @doc """
+    Creates a task for `worker` in `c:ExMCP.Server.Handler.handle_call_tool/3`
+    and returns the tool call result.
+    """
+    defmacro create_task(tool_name, worker, arguments, state) do
+      quote do
+        MCPOban.ExMCP.create_task(
+          unquote(tool_name),
+          unquote(worker),
+          unquote(arguments),
+          unquote(state),
+          __task_store_options__()
+        )
+      end
+    end
+
+    @doc """
+    Creates a task for `worker`. `opts` are the task store options of the handler.
+
+    Use it when the handler does not `use MCPOban.ExMCP`.
+    """
     @spec create_task(String.t(), module(), map(), term(), keyword()) ::
             {:ok, map(), term()} | {:error, term(), term()}
-    def create_task(tool_name, worker, arguments, state, opts \\ []) do
+    def create_task(tool_name, worker, arguments, state, opts) do
       ExMCP.Tasks.Server.create(tool_name, arguments, state, [{:worker, worker} | opts])
     end
   end

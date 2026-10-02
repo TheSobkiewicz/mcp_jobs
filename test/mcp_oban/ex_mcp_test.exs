@@ -63,6 +63,18 @@ defmodule MCPOban.ExMCPTest do
     assert %Oban.Job{state: "cancelled"} = Repo.one(Oban.Job)
   end
 
+  test "cancel leaves a running job alone, and kills it with the kill option" do
+    {task_id, _created} = create(SuccessWorker, %{"value" => 1})
+    {other_id, _created} = create(SuccessWorker, %{"value" => 2})
+    Repo.update_all(Oban.Job, set: [state: "executing"])
+
+    assert :ok = Tasks.cancel(task_id, opts())
+    assert :ok = Tasks.cancel(other_id, opts(kill: true))
+
+    states = Repo.all(from(j in Oban.Job, order_by: j.id, select: j.state))
+    assert states == ["executing", "cancelled"]
+  end
+
   test "cancel of a terminal task is acknowledged and changes nothing" do
     {task_id, _created} = create(SuccessWorker, %{"value" => 1})
     drain()

@@ -19,8 +19,11 @@ defmodule MCPOban.Telemetry do
   MCPOban attaches to `[:oban, :job, :stop]` and `[:oban, :job, :exception]` when
   its application starts. It changes a task only when Oban reports a final state
   (`:success`, `:discard` or `:cancelled`). A `:failure` state is a retry, so the
-  task stays `:working`. `MCPOban.Worker` saves the result before Oban reports
-  `:success`, so for these workers the `:success` event changes nothing.
+  task stays `:working`.
+
+  On `:success`, the return value of `perform/1` becomes the task result:
+  `{:ok, map}` saves the map, `{:ok, value}` saves `%{"value" => value}`, and
+  `:ok` saves no result.
   """
 
   require Logger
@@ -49,7 +52,7 @@ defmodule MCPOban.Telemetry do
       )
       when state in [:success, :discard, :cancelled] do
     case state do
-      :success -> MCPOban.transition(conf, task_id, :completed, result: nil)
+      :success -> MCPOban.transition(conf, task_id, :completed, result: result(meta))
       :discard -> MCPOban.transition(conf, task_id, :failed, error: error(meta))
       :cancelled -> MCPOban.transition(conf, task_id, :cancelled, [])
     end
@@ -82,6 +85,10 @@ defmodule MCPOban.Telemetry do
   defp metadata(%Task{task_id: task_id, oban_job_id: job_id, worker: worker}) do
     %{task_id: task_id, oban_job_id: job_id, worker: worker}
   end
+
+  defp result(%{result: {:ok, result}}) when is_map(result), do: result
+  defp result(%{result: {:ok, result}}), do: %{"value" => result}
+  defp result(%{}), do: nil
 
   defp error(%{error: %{__exception__: true} = exception}),
     do: %{"message" => Exception.message(exception)}

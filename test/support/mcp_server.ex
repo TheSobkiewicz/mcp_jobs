@@ -1,6 +1,6 @@
 defmodule MCPOban.Test.MCPServer do
   @moduledoc false
-  use ExMCP.Server.Handler, tasks: :store, task_store: MCPOban.ExMCP.Store
+  use MCPOban.ExMCP
 
   @impl ExMCP.Server.Handler
   def handle_list_tools(_cursor, state) do
@@ -16,12 +16,6 @@ defmodule MCPOban.Test.MCPServer do
 
   @impl ExMCP.Server.Handler
   def handle_call_tool("generate_report", arguments, state) do
-    MCPOban.ExMCP.create_task(
-      "generate_report",
-      MCPOban.Test.SuccessWorker,
-      arguments,
-      state,
-      __task_store_options__()
-    )
+    create_task("generate_report", MCPOban.Test.SuccessWorker, arguments, state)
   end
 end
