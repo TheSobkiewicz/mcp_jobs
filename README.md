@@ -72,18 +72,72 @@ The result is stored as JSON, so atom keys come back as strings. The result must
 
 ## Use with ExMCP
 
+List your workers. Each worker becomes a tool:
+
 ```elixir
 defmodule MyApp.MCPServer do
-  use MCPO.ExMCP
-
-  @impl ExMCP.Server.Handler
-  def handle_call_tool("generate_report", arguments, state) do
-    create_task("generate_report", MyApp.Workers.GenerateReport, arguments, state)
-  end
+  use MCPO.ExMCP,
+    tools: [
+      MyApp.Workers.GenerateReport,
+      {MyApp.Workers.SendEmail,
+       description: "Sends an email.",
+       input_schema: %{
+         "type" => "object",
+         "properties" => %{"to" => %{"type" => "string"}},
+         "required" => ["to"]
+       }}
+    ]
 end
 ```
 
-`use MCPO.ExMCP` is `use ExMCP.Server.Handler` with the MCPO task store. It also imports `create_task/4`. Other handler options are passed on to ExMCP.
+A worker can describe itself with `use MCPO.Tool`. The `@moduledoc` text becomes the tool description:
+
+```elixir
+defmodule MyApp.Workers.GenerateReport do
+  @moduledoc """
+  Generates a report in the background.
+  """
+
+  use Oban.Worker, queue: :reports
+
+  use MCPO.Tool,
+    input_schema: %{
+      "type" => "object",
+      "properties" => %{"steps" => %{"type" => "integer"}},
+      "required" => ["steps"]
+    }
+end
+```
+
+`use MCPO.Tool` reads `@moduledoc` when the worker compiles. So the description is there also in a release, where `mix release` removes the docs from the compiled files.
+
+Each value comes from the first place that has it:
+
+1. The options in the `tools:` list
+2. `use MCPO.Tool` options (`:name`, `:description`, `:input_schema`)
+3. The worker's `@moduledoc` (description only, with `use MCPO.Tool`)
+4. The default:
+
+| Option          | Default                                                        |
+| --------------- | -------------------------------------------------------------- |
+| `:name`         | From the module name: `MyApp.Workers.SendEmail` → `send_email` |
+| `:description`  | `"Runs MyApp.Workers.SendEmail as a background job."`          |
+| `:input_schema` | `%{"type" => "object"}` (any arguments)                        |
+
+The tool arguments become the job args.
+
+`use MCPO.ExMCP` is `use ExMCP.Server.Handler` with the MCPO task store. It defines `handle_initialize/2`, `handle_list_tools/2`, and `handle_call_tool/3`. Other handler options are passed on to ExMCP. Set `server_info: %{"name" => ..., "version" => ...}` to change the server name.
+
+To add a tool that is not an Oban job, define `handle_call_tool/3` and call `super` for the other tools:
+
+```elixir
+def handle_call_tool("echo", %{"text" => text}, state),
+  do: {:ok, %{"content" => [%{"type" => "text", "text" => text}]}, state}
+
+def handle_call_tool(name, arguments, state), do: super(name, arguments, state)
+```
+
+Also define `handle_list_tools/2` and add your tool to the list from `super`. `create_task/4` starts a job from your own `handle_call_tool/3`.
 
 ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPO table:
 
@@ -93,7 +147,7 @@ ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPO table:
 
 ### Clients without tasks
 
-Many clients do not support the MCP Tasks extension yet. For example, the MCP Inspector uses the TypeScript SDK, and its latest protocol is `2025-11-25`. For these clients, `create_task/4` waits for the Oban job and returns the tool result directly. The work still runs in Oban, with retries.
+Many clients do not support the MCP Tasks extension yet. For example, the MCP Inspector uses the TypeScript SDK, and its latest protocol is `2025-11-25`. For these clients, MCPO waits for the Oban job and returns the tool result directly. The work still runs in Oban, with retries.
 
 - A failed or cancelled job returns a tool result with `"isError": true`.
 - If the job does not finish in `:wait_timeout` (9 seconds by default), MCPO cancels the task and returns an error result.
@@ -108,9 +162,7 @@ Many clients do not support the MCP Tasks extension yet. For example, the MCP In
 
 - Over stdio, other requests on the same connection wait.
 
-Declare the tool with `"execution" => %{"taskSupport" => "optional"}`, so that both kinds of client can call it.
-
-A raw ExMCP handler answers `initialize` with no capabilities. Older clients then do not ask for tools. Implement `handle_initialize/2` and return `"capabilities" => %{"tools" => %{}}`. See `examples/report_server/lib/report_server/mcp_server.ex`.
+Listed tools have `"execution" => %{"taskSupport" => "optional"}`, so both kinds of client can call them. The generated `handle_initialize/2` returns the `tools` capability, so older clients ask for the tool list.
 
 ### Limits
 

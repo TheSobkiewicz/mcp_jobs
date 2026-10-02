@@ -96,3 +96,8 @@ Each step ends with passing tests.
 ## Clients without tasks (2026-10-02)
 
 Test with the MCP Inspector (TypeScript SDK 1.29, latest protocol `2025-11-25`) showed that it does not know the MCP Tasks extension. Decision: fallback. When a client does not declare the extension, `MCPO.ExMCP.create_task` waits for the job with `MCPO.await/2` and returns the tool result directly. On `:wait_timeout` the task is cancelled. Tools use `taskSupport: "optional"`.
+
+## Tools list (2026-10-02)
+
+`use MCPO.ExMCP, tools: [Worker, {Worker, name: ..., description: ..., input_schema: ...}]` generates `handle_initialize/2`, `handle_list_tools/2` and `handle_call_tool/3`. They are overridable and support `super`.
+`use MCPO.Tool, input_schema: ...` in a worker gives the name, description (from `@moduledoc`) and input schema. Priority: `tools:` options, then `MCPO.Tool` options, then `@moduledoc`, then defaults. `Code.fetch_docs/1` cannot read docs of modules compiled in the same build, and `mix release` strips docs, so the values are kept at worker compile time.

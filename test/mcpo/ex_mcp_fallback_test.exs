@@ -23,29 +23,34 @@ defmodule MCPO.ExMCPFallbackTest do
   end
 
   defp run_jobs_in_background do
-    test_pid = self()
+    pid = spawn_link(&drain_loop/0)
 
-    pid =
-      spawn_link(fn ->
-        Stream.repeatedly(fn ->
-          drain()
-          Process.sleep(20)
-        end)
-        |> Stream.take_while(fn _ -> Process.alive?(test_pid) end)
-        |> Stream.run()
-      end)
+    fn ->
+      ref = Process.monitor(pid)
+      send(pid, :stop)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+    end
+  end
 
-    on_exit(fn -> Process.exit(pid, :kill) end)
+  defp drain_loop do
+    receive do
+      :stop -> :ok
+    after
+      20 ->
+        drain()
+        drain_loop()
+    end
   end
 
   for {mode, label} <- [prefer_modern: "a modern client", legacy_only: "a legacy client"] do
     test "#{label} without tasks gets the result directly" do
       client = start_client(unquote(mode), %{})
-      run_jobs_in_background()
+      stop_jobs = run_jobs_in_background()
 
       assert {:ok, %{"structuredContent" => %{"value" => 4}} = result} =
                ExMCP.Client.call_tool(client, "generate_report", %{"value" => 4}, format: :map)
 
+      stop_jobs.()
       refute Map.has_key?(result, "taskId")
       assert %Task{status: :completed} = Repo.one(Task)
     end
@@ -53,11 +58,12 @@ defmodule MCPO.ExMCPFallbackTest do
 
   test "a failed job returns an error result" do
     client = start_client(:prefer_modern, %{})
-    run_jobs_in_background()
+    stop_jobs = run_jobs_in_background()
 
     assert {:ok, %{"isError" => true, "content" => [%{"text" => text}]}} =
              ExMCP.Client.call_tool(client, "failing_report", %{}, format: :map)
 
+    stop_jobs.()
     assert text =~ "boom"
   end
 

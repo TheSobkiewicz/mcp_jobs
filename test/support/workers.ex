@@ -61,3 +61,27 @@ defmodule MCPO.Test.CancelledDuringRunWorker do
     if MCPO.cancelled?(job), do: {:cancel, :mcp_task_cancelled}, else: {:ok, %{}}
   end
 end
+
+defmodule MCPO.Test.DocumentedWorker do
+  @moduledoc """
+  Builds a summary.
+  """
+
+  use Oban.Worker
+
+  use MCPO.Tool,
+    input_schema: %{"type" => "object", "properties" => %{"text" => %{"type" => "string"}}}
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: :ok
+end
+
+defmodule MCPO.Test.HiddenDocWorker do
+  @moduledoc false
+
+  use Oban.Worker
+  use MCPO.Tool, name: "hidden"
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: :ok
+end

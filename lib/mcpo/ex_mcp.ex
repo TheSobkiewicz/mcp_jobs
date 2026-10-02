@@ -3,19 +3,54 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @moduledoc """
     Runs ExMCP tool calls as Oban jobs.
 
-        defmodule MyApp.MCPServer do
-          use MCPO.ExMCP
+    List your Oban workers as tools:
 
-          @impl ExMCP.Server.Handler
-          def handle_call_tool("generate_report", arguments, state) do
-            create_task("generate_report", MyApp.Workers.GenerateReport, arguments, state)
-          end
+        defmodule MyApp.MCPServer do
+          use MCPO.ExMCP,
+            tools: [
+              MyApp.Workers.GenerateReport,
+              {MyApp.Workers.SendEmail,
+               description: "Sends an email.",
+               input_schema: %{
+                 "type" => "object",
+                 "properties" => %{"to" => %{"type" => "string"}},
+                 "required" => ["to"]
+               }}
+            ]
         end
 
-    `use MCPO.ExMCP` is `use ExMCP.Server.Handler` with `MCPO.ExMCP.Store`
-    as the task store. It also imports `create_task/4`. The client gets the task
+    Each call of a tool inserts a job for its worker. The client gets the task
     at once. ExMCP then answers `tasks/get` and `tasks/cancel` from the
     `mcpo_tasks` table.
+
+    ## Tool options
+
+      * `:name`: the tool name. The default is made from the last part of the
+        module name: `MyApp.Workers.SendEmail` becomes `"send_email"`.
+      * `:description`: the tool description.
+      * `:input_schema`: the JSON Schema of the tool arguments. The default
+        accepts any object. The arguments become the job args.
+
+    A worker with `use MCPO.Tool` gives its own name, description (from
+    `@moduledoc`) and input schema. The options in the `tools:` list override them.
+
+    ## Generated callbacks
+
+    `use MCPO.ExMCP` is `use ExMCP.Server.Handler` with `MCPO.ExMCP.Store` as
+    the task store. It defines `handle_initialize/2`, `handle_list_tools/2` and
+    `handle_call_tool/3` for the listed tools. You can define them again, and
+    call `super/3` for the MCPO tools:
+
+        def handle_call_tool("echo", %{"text" => text}, state),
+          do: {:ok, %{"content" => [%{"type" => "text", "text" => text}]}, state}
+
+        def handle_call_tool(name, arguments, state), do: super(name, arguments, state)
+
+    For a tool that is not in the list, call `create_task/4` from your own
+    `handle_call_tool/3`.
+
+    Set `server_info: %{"name" => ..., "version" => ...}` to change the server
+    name that `initialize` returns.
 
     ## Clients without tasks
 
@@ -32,8 +67,8 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
         `:handler_call_timeout` on `ExMCP.HttpPlug`.
       * Over stdio, other requests on the same connection wait.
 
-    Declare the tool with `"execution" => %{"taskSupport" => "optional"}`, so
-    that clients with and without tasks can call it.
+    Listed tools have `"execution" => %{"taskSupport" => "optional"}`, so that
+    clients with and without tasks can call them.
 
     ## Options
 
@@ -58,15 +93,115 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     alias MCPO.Task
 
     @default_wait_timeout 9_000
+    @legacy_versions ~w(2025-11-25 2025-06-18 2025-03-26 2024-11-05)
 
     defmacro __using__(opts) do
+      {tools, opts} = Keyword.pop(opts, :tools, [])
+      {server_info, opts} = Keyword.pop(opts, :server_info)
       handler_opts = Keyword.merge([tasks: :store, task_store: MCPO.ExMCP.Store], opts)
 
       quote do
         use ExMCP.Server.Handler, unquote(handler_opts)
 
         import MCPO.ExMCP, only: [create_task: 4]
+
+        @mcpo_tools MCPO.ExMCP.__tools__(unquote(tools))
+        @mcpo_server_info unquote(server_info) ||
+                            %{"name" => inspect(__MODULE__), "version" => "1.0.0"}
+
+        @impl ExMCP.Server.Handler
+        def handle_initialize(params, state),
+          do: {:ok, MCPO.ExMCP.__initialize__(params, @mcpo_server_info), state}
+
+        @impl ExMCP.Server.Handler
+        def handle_list_tools(_cursor, state),
+          do: {:ok, MCPO.ExMCP.__list_tools__(@mcpo_tools), nil, state}
+
+        @impl ExMCP.Server.Handler
+        def handle_call_tool(name, arguments, state) do
+          MCPO.ExMCP.__call_tool__(@mcpo_tools, name, arguments, state, __task_store_options__())
+        end
+
+        defoverridable handle_initialize: 2, handle_list_tools: 2, handle_call_tool: 3
       end
+    end
+
+    @doc false
+    @spec __tools__([module() | {module(), keyword()}]) :: [map()]
+    def __tools__(tools) do
+      specs = Enum.map(tools, &tool_spec/1)
+      names = Enum.map(specs, fn %{name: name} -> name end)
+
+      case names -- Enum.uniq(names) do
+        [] -> specs
+        duplicates -> raise ArgumentError, "duplicate MCPO tool names: #{inspect(duplicates)}"
+      end
+    end
+
+    @doc false
+    @spec __initialize__(map(), map()) :: map()
+    def __initialize__(params, server_info) do
+      version =
+        case params do
+          %{"protocolVersion" => version} when version in @legacy_versions -> version
+          _other -> hd(@legacy_versions)
+        end
+
+      %{
+        "protocolVersion" => version,
+        "serverInfo" => server_info,
+        "capabilities" => %{"tools" => %{}}
+      }
+    end
+
+    @doc false
+    @spec __list_tools__([map()]) :: [map()]
+    def __list_tools__(specs) do
+      for %{name: name, description: description, input_schema: input_schema} <- specs do
+        %{
+          "name" => name,
+          "description" => description,
+          "inputSchema" => input_schema,
+          "execution" => %{"taskSupport" => "optional"}
+        }
+      end
+    end
+
+    @doc false
+    @spec __call_tool__([map()], String.t(), map(), term(), keyword()) ::
+            {:ok, map(), term()} | {:error, term(), term()}
+    def __call_tool__(specs, name, arguments, state, opts) do
+      case Enum.find(specs, &match?(%{name: ^name}, &1)) do
+        %{worker: worker} -> create_task(name, worker, arguments, state, opts)
+        nil -> {:error, "Unknown tool: #{name}", state}
+      end
+    end
+
+    defp tool_spec(worker) when is_atom(worker), do: tool_spec({worker, []})
+
+    defp tool_spec({worker, opts}) when is_atom(worker) and is_list(opts) do
+      Code.ensure_compiled!(worker)
+
+      if not function_exported?(worker, :perform, 1) do
+        raise ArgumentError, "#{inspect(worker)} is not an Oban worker"
+      end
+
+      opts = Keyword.merge(MCPO.Tool.options(worker), opts)
+
+      %{
+        name: Keyword.get_lazy(opts, :name, fn -> default_name(worker) end),
+        worker: worker,
+        description:
+          Keyword.get(opts, :description, "Runs #{inspect(worker)} as a background job."),
+        input_schema: Keyword.get(opts, :input_schema, %{"type" => "object"})
+      }
+    end
+
+    defp default_name(worker) do
+      worker
+      |> Module.split()
+      |> List.last()
+      |> Macro.underscore()
     end
 
     @doc """
