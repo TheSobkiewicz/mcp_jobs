@@ -18,8 +18,9 @@ defmodule MCPOban.Telemetry do
 
   MCPOban attaches to `[:oban, :job, :stop]` and `[:oban, :job, :exception]` when
   its application starts. It changes a task only when Oban reports a final state
-  (`:discard` or `:cancelled`). A `:failure` state is a retry, so the task stays
-  `:working`.
+  (`:success`, `:discard` or `:cancelled`). A `:failure` state is a retry, so the
+  task stays `:working`. `MCPOban.Worker` saves the result before Oban reports
+  `:success`, so for these workers the `:success` event changes nothing.
   """
 
   require Logger
@@ -46,8 +47,9 @@ defmodule MCPOban.Telemetry do
         %{job: %Oban.Job{meta: %{"mcp_task_id" => task_id}}, state: state, conf: conf} = meta,
         _config
       )
-      when state in [:discard, :cancelled] do
+      when state in [:success, :discard, :cancelled] do
     case state do
+      :success -> MCPOban.transition(conf, task_id, :completed, result: nil)
       :discard -> MCPOban.transition(conf, task_id, :failed, error: error(meta))
       :cancelled -> MCPOban.transition(conf, task_id, :cancelled, [])
     end

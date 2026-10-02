@@ -82,7 +82,7 @@ defmodule MCPObanTest do
 
       drain()
 
-      assert {:ok, %{status: :completed, result: nil}} = MCPOban.status(task_id)
+      assert %Task{status: :completed, result: nil} = Repo.get_by(Task, task_id: task_id)
     end
   end
 

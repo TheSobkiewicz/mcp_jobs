@@ -18,6 +18,7 @@ defmodule MCPOban.Task do
           oban_job_id: integer() | nil,
           worker: String.t(),
           owner: map() | nil,
+          meta: map(),
           status: status(),
           result: map() | nil,
           error: map() | nil,
@@ -30,6 +31,7 @@ defmodule MCPOban.Task do
     field :oban_job_id, :integer
     field :worker, :string
     field :owner, :map
+    field :meta, :map, default: %{}
     field :status, Ecto.Enum, values: @statuses, default: :working
     field :result, :map
     field :error, :map

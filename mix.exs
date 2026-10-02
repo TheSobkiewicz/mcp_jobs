@@ -28,8 +28,8 @@ defmodule MCPOban.MixProject do
       {:oban, "~> 2.24"},
       {:ecto_sql, "~> 3.14"},
       {:telemetry, "~> 1.4"},
+      {:ex_mcp, "~> 1.5", optional: true},
       {:postgrex, "~> 0.22", only: [:dev, :test]},
-      {:jason, "~> 1.4", only: [:dev, :test]},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
   end

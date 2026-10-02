@@ -34,6 +34,7 @@ defmodule MCPOban do
       When a task with this ID already exists, it is returned and no new job is
       inserted.
     * `:owner`: a map with the auth context of the task (for example a user ID).
+    * `:meta`: a map of extra data for the MCP server adapter.
     * `:job`: options for `c:Oban.Worker.new/2`, such as `:queue` or `:scheduled_at`.
     * `:oban`: the Oban instance name.
   """
@@ -41,7 +42,13 @@ defmodule MCPOban do
   def enqueue(worker, args, opts \\ []) when is_atom(worker) and is_map(args) do
     conf = config(opts)
     task_id = Keyword.get_lazy(opts, :task_id, &generate_task_id/0)
-    attrs = %{task_id: task_id, worker: inspect(worker), owner: opts[:owner]}
+
+    attrs = %{
+      task_id: task_id,
+      worker: inspect(worker),
+      owner: opts[:owner],
+      meta: Keyword.get(opts, :meta, %{})
+    }
 
     result =
       Oban.Repo.transaction(conf, fn ->
@@ -120,7 +127,7 @@ defmodule MCPOban do
         {:ok, task}
 
       :noop ->
-        if Repository.get(conf, task_id), do: {:error, :terminal}, else: {:error, :not_found}
+        noop_error(conf, task_id)
     end
   end
 
@@ -140,6 +147,29 @@ defmodule MCPOban do
     match?(%Task{status: :cancelled}, Repository.get(config(opts), task_id))
   end
 
+  @doc """
+  Completes a working task with a result.
+
+  `MCPOban.Worker` calls it for you. Use it when you write a plain `Oban.Worker`.
+  Returns `{:error, :terminal}` when the task is not `:working`.
+  """
+  @spec complete(String.t(), map() | nil, keyword()) ::
+          {:ok, Task.t()} | {:error, :not_found | :terminal}
+  def complete(task_id, result, opts \\ []) when is_map(result) or is_nil(result) do
+    finish(task_id, :completed, [result: result], opts)
+  end
+
+  @doc """
+  Fails a working task with an error.
+
+  Returns `{:error, :terminal}` when the task is not `:working`.
+  """
+  @spec fail(String.t(), map(), keyword()) ::
+          {:ok, Task.t()} | {:error, :not_found | :terminal}
+  def fail(task_id, error, opts \\ []) when is_map(error) do
+    finish(task_id, :failed, [error: error], opts)
+  end
+
   @doc false
   @spec transition(Oban.Config.t(), String.t(), Task.status(), keyword()) ::
           {:ok, Task.t()} | :noop
@@ -152,6 +182,19 @@ defmodule MCPOban do
       :noop ->
         :noop
     end
+  end
+
+  defp finish(task_id, status, changes, opts) do
+    conf = config(opts)
+
+    case transition(conf, task_id, status, changes) do
+      {:ok, task} -> {:ok, task}
+      :noop -> noop_error(conf, task_id)
+    end
+  end
+
+  defp noop_error(conf, task_id) do
+    if Repository.get(conf, task_id), do: {:error, :terminal}, else: {:error, :not_found}
   end
 
   defp insert_job(%Oban.Config{name: name} = conf, worker, args, task_id, opts) do

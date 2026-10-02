@@ -50,5 +50,7 @@ The plan and its decisions are in `docs/PLAN.md`.
 - `MCPOban.Worker`: wraps `perform/1`. It saves the result of `run/1`.
 - `MCPOban.Telemetry`: listens to Oban job events and sets `failed` or `cancelled`. It also sends `[:mcp_oban, :task, ...]` events.
 - `MCPOban.Application`: attaches the telemetry handler. It starts no processes.
+- `MCPOban.ExMCP` and `MCPOban.ExMCP.Store`: the ExMCP adapter. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
+- `examples/report_server`: an example app. Run `mix run demo.exs` in it to check the full flow with real Oban queues.
 - MCPOban uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
 - Tests need a local Postgres. `test/test_helper.exs` creates the `mcp_oban_test` database and runs the migrations.

@@ -28,6 +28,7 @@ defmodule MCPOban.Migration do
       add :oban_job_id, :bigint
       add :worker, :string, null: false
       add :owner, :map
+      add :meta, :map
       add :status, :string, null: false, default: "working"
       add :result, :map
       add :error, :map

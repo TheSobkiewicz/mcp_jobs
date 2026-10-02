@@ -84,4 +84,5 @@ Each step ends with passing tests.
 ## Progress
 
 - Done: steps 1 to 9 (core library and its tests).
-- Next: step 10 (ExMCP adapter and example app), step 11 (README).
+- Done: step 10 (ExMCP adapter, `examples/report_server`) and step 11 (README).
+- Next: FastestMCP adapter.
