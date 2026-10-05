@@ -50,6 +50,21 @@ end
 
 If Oban uses a prefix, pass the same prefix: `MCPOban.Migration.up(prefix: "private")`.
 
+### Upgrading
+
+The `mcp_oban_tasks` table has a version, stored as a comment on the table. When a new MCPOban release changes the table, add a migration that runs only the missing versions:
+
+```elixir
+defmodule MyApp.Repo.Migrations.UpgradeMCPObanTasks do
+  use Ecto.Migration
+
+  def up, do: MCPOban.Migration.up(version: 2)
+  def down, do: MCPOban.Migration.down(version: 2)
+end
+```
+
+Version 2 added the `progress` column. `MCPOban.Migration.migrated_version/1` returns the version of your database.
+
 If your Oban instance does not have the name `Oban`, set the name:
 
 ```elixir
@@ -276,6 +291,29 @@ To make an adapter for a different MCP server, use `MCPOban.enqueue/3`, `MCPOban
 ### Duplicate requests
 
 Give the MCP task ID as `task_id:`. If a task with this ID already exists for the same worker and owner, `enqueue/3` returns it and does not insert a second job. If the worker or the owner is different, it returns `{:error, :already_exists}`, so one owner never gets another owner's task. A unique index in the database enforces this, also for requests that arrive at the same time.
+
+## Progress
+
+A long worker can report its progress:
+
+```elixir
+def perform(%Oban.Job{args: %{"steps" => steps}} = job) do
+  for step <- 1..steps do
+    do_step(step)
+    MCPOban.progress(job, step, steps, "Wrote section #{step}")
+  end
+
+  {:ok, %{"sections" => steps}}
+end
+```
+
+`MCPOban.progress(job, current, total \\ nil, message \\ nil)` saves the progress while the task is `working`. `current` should grow. Clients see it:
+
+- With ExMCP, `tasks/get` shows it as `statusMessage`, for example `"Wrote section 2 (2/5)"`. A client without tasks gets progress notifications when it sent a progress token.
+- With FastestMCP, it becomes the progress of the FastestMCP task, and FastestMCP sends it to the client.
+- `MCPOban.status/2` returns it as `%{status: :working, progress: %{"current" => 2, "total" => 5, "message" => "..."}}`.
+
+The adapters check for new progress at their `:interval`.
 
 ## Errors
 

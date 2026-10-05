@@ -518,6 +518,64 @@ defmodule MCPObanTest do
     end
   end
 
+  describe "progress/4" do
+    defp running_job(job_id), do: %{Repo.get(Oban.Job, job_id) | conf: Oban.config()}
+
+    test "saves the progress while the task is working" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
+
+      assert :ok = MCPOban.progress(running_job(job_id), 2, 5, "Rendering")
+
+      assert {:ok,
+              %{
+                status: :working,
+                progress: %{"current" => 2, "total" => 5, "message" => "Rendering"}
+              }} =
+               MCPOban.status(task_id)
+
+      assert :ok = MCPOban.progress(running_job(job_id), 3)
+      assert {:ok, %{progress: %{"current" => 3} = progress}} = MCPOban.status(task_id)
+      assert map_size(progress) == 1
+    end
+
+    test "does not change a finished task" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
+
+      drain()
+
+      assert :ok = MCPOban.progress(running_job(job_id), 9, 9)
+      assert %Task{status: :completed, progress: nil} = Repo.get_by(Task, task_id: task_id)
+    end
+
+    test "ignores a job without a task and rejects wrong values" do
+      assert :ok = MCPOban.progress(%Oban.Job{meta: %{}}, 1)
+
+      assert_raise FunctionClauseError, fn ->
+        MCPOban.progress(%Oban.Job{meta: %{"mcp_task_id" => "x"}, conf: Oban.config()}, "1")
+      end
+    end
+
+    test "await calls on_progress once for each change" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
+
+      test_pid = self()
+      :ok = MCPOban.progress(running_job(job_id), 1, 2)
+
+      assert {:error, :timeout} =
+               MCPOban.await(task_id,
+                 timeout: 100,
+                 interval: 10,
+                 on_progress: &send(test_pid, {:progress, &1})
+               )
+
+      assert_received {:progress, %{"current" => 1, "total" => 2}}
+      refute_received {:progress, _}
+    end
+  end
+
   describe "races" do
     test "a cancel after completion does nothing" do
       {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 1})

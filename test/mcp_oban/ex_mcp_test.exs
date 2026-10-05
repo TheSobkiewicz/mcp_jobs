@@ -130,6 +130,17 @@ defmodule MCPOban.ExMCPTest do
     assert {:ok, %{"status" => "working"}} = Tasks.get(task_id, atom_owner)
   end
 
+  test "get shows the progress of a working task as its status message" do
+    {task_id, _created} = create(SuccessWorker, %{"value" => 1})
+    %MCPOban.Task{oban_job_id: job_id} = Repo.get_by(MCPOban.Task, task_id: task_id)
+    job = %{Repo.get(Oban.Job, job_id) | conf: Oban.config()}
+
+    :ok = MCPOban.progress(job, 2, 5, "Rendering")
+
+    assert {:ok, %{"status" => "working", "statusMessage" => "Rendering (2/5)"}} =
+             Tasks.get(task_id, opts())
+  end
+
   test "create without a worker is rejected" do
     assert {:error, :invalid_task} = Tasks.create("generate_report", %{}, opts())
   end

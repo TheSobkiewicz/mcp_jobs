@@ -32,6 +32,14 @@ defmodule MCPOban.Repository do
     task
   end
 
+  @spec put_progress(Config.t(), String.t(), map()) :: :ok
+  def put_progress(%Config{} = conf, task_id, progress) do
+    query = from(t in Task, where: t.task_id == ^task_id and t.status == ^:working)
+    Repo.update_all(conf, query, set: [progress: progress, updated_at: DateTime.utc_now()])
+
+    :ok
+  end
+
   @doc """
   Moves a `:working` task to a terminal status. The `WHERE status = 'working'`
   condition makes the database pick one winner when changes race.

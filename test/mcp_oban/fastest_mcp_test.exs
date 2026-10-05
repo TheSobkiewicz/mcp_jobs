@@ -23,7 +23,7 @@ defmodule MCPOban.FastestMCPTest do
     server =
       name
       |> FastestMCP.server()
-      |> MCPOban.FastestMCP.add_tools(@tools, wait_timeout: 300)
+      |> MCPOban.FastestMCP.add_tools(@tools, wait_timeout: 300, interval: 20)
 
     {:ok, _pid} = FastestMCP.start_server(server)
     on_exit(fn -> FastestMCP.stop_server(name) end)
@@ -97,6 +97,25 @@ defmodule MCPOban.FastestMCPTest do
 
     assert %Task{status: :working} = Repo.get_by(Task, task_id: task_id)
     assert %Oban.Job{state: "available"} = Repo.get(Oban.Job, job_id)
+  end
+
+  test "the progress of the job reaches the FastestMCP task", %{name: name} do
+    %FastestMCP.BackgroundTask{task_id: task_id} =
+      task = FastestMCP.call_tool(name, "generate_report", %{"value" => 3}, task: true)
+
+    %Task{oban_job_id: job_id} = eventually(fn -> Repo.get_by(Task, task_id: task_id) end)
+    :ok = MCPOban.progress(%{Repo.get(Oban.Job, job_id) | conf: Oban.config()}, 1, 4, "Loading")
+
+    assert %{current: 1, total: 4, message: "Loading"} =
+             eventually(fn ->
+               case FastestMCP.fetch_task(task) do
+                 %{progress: %{current: 1} = progress} -> progress
+                 _no_progress_yet -> nil
+               end
+             end)
+
+    drain()
+    assert %{structuredContent: %{"value" => 3}} = FastestMCP.await_task(task, 2_000)
   end
 
   test "a failed job returns an error result", %{name: name} do

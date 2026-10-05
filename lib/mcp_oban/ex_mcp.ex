@@ -276,7 +276,11 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
 
       with {:ok, %Task{task_id: task_id}} <-
              MCPOban.enqueue(worker, arguments, enqueue_opts ++ oban_opts) do
-        wait_opts = [timeout: timeout, interval: Keyword.get(opts, :interval, 100)]
+        wait_opts = [
+          timeout: timeout,
+          interval: Keyword.get(opts, :interval, 100),
+          on_progress: &send_progress/1
+        ]
 
         case MCPOban.await(task_id, wait_opts ++ oban_opts) do
           {:ok, task} ->
@@ -304,6 +308,16 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
         {:error, :not_found} ->
           tool_error("The task was not found.")
       end
+    end
+
+    # Sends a progress notification when the client asked for one with a
+    # progress token. Without a token ExMCP sends nothing.
+    defp send_progress(%{"current" => current} = progress) do
+      ExMCP.Server.Context.report_progress(
+        current,
+        Map.get(progress, "total"),
+        Map.get(progress, "message")
+      )
     end
 
     defp tool_result(%Task{status: :completed} = task), do: Store.call_tool_result(task)

@@ -168,3 +168,24 @@ Second review of these fixes (3 reviewers), all fixed:
 - The ExMCP store converts owners through JSON, like `enqueue/3`.
 - The FastestMCP watcher also catches exits (server stop).
 - A result that cannot be saved as JSON keeps the reason in `"details"`.
+
+## Ideas backlog (2026-10-05)
+
+Ordered by value. Status in brackets.
+
+1. Progress messages: `MCPOban.progress(job, current, total, message)` in a worker; clients see it (FastestMCP progress, ExMCP task status message). [done]
+2. Functions as tools without a worker: a generic worker runs `{Module, :function, arity}` entries in `tools:`.
+3. Per-tool job options in `tools:` (`job: [queue:, priority:, max_attempts:, unique:]`).
+4. Ask the user during a job (MCP `input_required`).
+5. Oban tools for AI agents: list queues, failed jobs and errors, retry or cancel.
+6. Durable FastestMCP tasks: a FastestMCP TaskBackend on `mcp_oban_tasks`.
+7. `mix mcp_oban.install --phoenix` adds the `forward "/mcp"` route.
+8. Push notifications (`notifications/tasks`) on task changes.
+
+Also open: Hex package metadata and license (publishing postponed); release-review single findings (ExMCP fallback ignores `notifications/cancelled`; `"content"` lists not checked for block shape; no tests for an Oban prefix, real queues, the snooze branch). The migration version finding is fixed.
+
+## Progress messages (2026-10-05)
+
+`MCPOban.progress(job, current, total, message)` saves a `progress` map on the working task (new `progress` column, added with `add_if_not_exists`). `MCPOban.await/2` calls `:on_progress` on each change. ExMCP shows it as the task `statusMessage` and sends progress notifications in the fallback; FastestMCP forwards it to `FastestMCP.Context.report_progress/4`.
+
+Found on the way: an existing database did not get the new column, because the migration had no version (release-review single finding). Fixed: `MCPOban.Migration` now has versions like Oban (version 1: table; version 2: `progress`), stored as a table comment; a table without a comment counts as version 1. The test helper now drops and creates the test database on each run.

@@ -1,6 +1,6 @@
 defmodule MCPOban.Migration do
   @moduledoc """
-  Creates the `mcp_oban_tasks` table.
+  Creates and upgrades the `mcp_oban_tasks` table.
 
   Call it from a migration in your application:
 
@@ -11,6 +11,22 @@ defmodule MCPOban.Migration do
         def down, do: MCPOban.Migration.down()
       end
 
+  The table has a version. `up/1` runs only the versions that the database does
+  not have yet, and records the new version as a comment on the table. When a new
+  MCPOban release changes the table, add a new migration that calls `up/1` again:
+
+      defmodule MyApp.Repo.Migrations.UpgradeMCPObanTasks do
+        use Ecto.Migration
+
+        def up, do: MCPOban.Migration.up(version: 2)
+        def down, do: MCPOban.Migration.down(version: 2)
+      end
+
+  Versions:
+
+    * 1: the table, its indexes and the status constraint.
+    * 2: the `progress` column.
+
   The table must be in the same prefix as the Oban tables. Pass `prefix: "..."`
   when Oban uses a prefix other than `"public"`.
 
@@ -19,10 +35,75 @@ defmodule MCPOban.Migration do
 
   use Ecto.Migration
 
-  @doc "Creates the table, its indexes and its constraint, when they do not exist."
+  @current_version 2
+
+  @doc """
+  Upgrades the table to `:version` (default: the current version).
+
+  ## Options
+
+    * `:version`: the version to upgrade to.
+    * `:prefix`: the database prefix. The default is `"public"`.
+  """
   @spec up(keyword()) :: :ok
   def up(opts \\ []) do
     prefix = Keyword.get(opts, :prefix, "public")
+    target = Keyword.get(opts, :version, @current_version)
+    initial = migrated_version(prefix: prefix)
+
+    if initial < target do
+      Enum.each((initial + 1)..target//1, &change(&1, :up, prefix))
+      record_version(prefix, target)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Reverts the table down to before `:version` (default: 1, which drops the table).
+
+  ## Options
+
+    * `:version`: the lowest version to revert.
+    * `:prefix`: the database prefix. The default is `"public"`.
+  """
+  @spec down(keyword()) :: :ok
+  def down(opts \\ []) do
+    prefix = Keyword.get(opts, :prefix, "public")
+    target = Keyword.get(opts, :version, 1)
+    initial = migrated_version(prefix: prefix)
+
+    if initial >= target do
+      Enum.each(initial..target//-1, &change(&1, :down, prefix))
+      if target > 1, do: record_version(prefix, target - 1)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Returns the version of the table in the database: 0 when there is no table.
+
+  A table from before versions existed counts as version 1.
+  """
+  @spec migrated_version(keyword()) :: non_neg_integer()
+  def migrated_version(opts \\ []) do
+    prefix = Keyword.get(opts, :prefix, "public")
+    table = ~s("#{prefix}".mcp_oban_tasks)
+
+    query = """
+    SELECT to_regclass('#{table}') IS NOT NULL,
+           pg_catalog.obj_description(to_regclass('#{table}'), 'pg_class')
+    """
+
+    case repo().query!(query, [], log: false) do
+      %{rows: [[false, _comment]]} -> 0
+      %{rows: [[true, nil]]} -> 1
+      %{rows: [[true, comment]]} -> String.to_integer(comment)
+    end
+  end
+
+  defp change(1, :up, prefix) do
     statuses = Enum.map_join(MCPOban.Task.statuses(), ", ", &"'#{&1}'")
 
     create_if_not_exists table(:mcp_oban_tasks, prefix: prefix) do
@@ -56,17 +137,25 @@ defmodule MCPOban.Migration do
     END
     $$;
     """
-
-    :ok
   end
 
-  @doc "Drops the table."
-  @spec down(keyword()) :: :ok
-  def down(opts \\ []) do
-    prefix = Keyword.get(opts, :prefix, "public")
-
+  defp change(1, :down, prefix) do
     drop_if_exists table(:mcp_oban_tasks, prefix: prefix)
+  end
 
-    :ok
+  defp change(2, :up, prefix) do
+    alter table(:mcp_oban_tasks, prefix: prefix) do
+      add_if_not_exists :progress, :map
+    end
+  end
+
+  defp change(2, :down, prefix) do
+    alter table(:mcp_oban_tasks, prefix: prefix) do
+      remove_if_exists :progress, :map
+    end
+  end
+
+  defp record_version(prefix, version) do
+    execute ~s(COMMENT ON TABLE "#{prefix}".mcp_oban_tasks IS '#{version}')
   end
 end

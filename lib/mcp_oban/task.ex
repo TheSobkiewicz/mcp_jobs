@@ -22,6 +22,7 @@ defmodule MCPOban.Task do
           status: status(),
           result: map() | nil,
           error: map() | nil,
+          progress: map() | nil,
           inserted_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil
         }
@@ -35,6 +36,7 @@ defmodule MCPOban.Task do
     field :status, Ecto.Enum, values: @statuses, default: :working
     field :result, :map
     field :error, :map
+    field :progress, :map
 
     timestamps(type: :utc_datetime_usec)
   end

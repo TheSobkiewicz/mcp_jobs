@@ -165,6 +165,8 @@ defmodule MCPOban do
       is 5000.
     * `:interval`: the time between two status checks in milliseconds. The
       default is 100.
+    * `:on_progress`: a function that gets the new progress map (see
+      `progress/4`) each time it changes while the task is working.
     * `:oban`: the Oban instance name.
   """
   @spec await(String.t(), keyword()) :: {:ok, Task.t()} | {:error, :not_found | :timeout}
@@ -175,7 +177,7 @@ defmodule MCPOban do
         timeout -> System.monotonic_time(:millisecond) + timeout
       end
 
-    poll(task_id, deadline, Keyword.get(opts, :interval, 100), opts)
+    poll(task_id, deadline, Keyword.get(opts, :interval, 100), nil, opts)
   end
 
   @doc false
@@ -231,6 +233,32 @@ defmodule MCPOban do
 
   def cancelled?(%Oban.Job{}), do: false
 
+  @doc """
+  Reports the progress of the task of this job. Use it in a long running worker:
+
+      MCPOban.progress(job, 2, 5, "Rendering the report")
+
+  `current` and `total` are numbers, and `current` should grow. The progress is
+  saved while the task is `:working`. `status/2` returns it, and the MCP
+  adapters show it to clients. A job without a task is ignored.
+  """
+  @spec progress(Oban.Job.t(), number(), number() | nil, String.t() | nil) :: :ok
+  def progress(job, current, total \\ nil, message \\ nil)
+
+  def progress(%Oban.Job{meta: %{"mcp_task_id" => task_id}, conf: conf}, current, total, message)
+      when is_number(current) and (is_nil(total) or is_number(total)) and
+             (is_nil(message) or is_binary(message)) do
+    progress =
+      %{"current" => current, "total" => total, "message" => message}
+      |> Map.reject(fn {_key, value} -> is_nil(value) end)
+
+    Repository.put_progress(conf, task_id, progress)
+  end
+
+  def progress(%Oban.Job{meta: meta}, _current, _total, _message)
+      when not is_map_key(meta, "mcp_task_id"),
+      do: :ok
+
   @doc false
   @spec complete(String.t(), map() | nil, keyword()) ::
           {:ok, Task.t()} | {:error, :not_found | :terminal}
@@ -259,32 +287,43 @@ defmodule MCPOban do
     end
   end
 
-  defp poll(task_id, :infinity, interval, opts) do
+  defp poll(task_id, deadline, interval, last_progress, opts) do
     case get_for_poll(task_id, opts) do
-      {:ok, %Task{status: :working}} ->
-        Process.sleep(interval)
-        poll(task_id, :infinity, interval, opts)
+      {:ok, %Task{status: :working, progress: progress}} ->
+        last_progress = report_progress(progress, last_progress, opts)
+
+        case remaining(deadline) do
+          :expired ->
+            {:error, :timeout}
+
+          remaining ->
+            Process.sleep(min(interval, remaining))
+            poll(task_id, deadline, interval, last_progress, opts)
+        end
 
       result ->
         result
     end
   end
 
-  defp poll(task_id, deadline, interval, opts) do
-    case get_for_poll(task_id, opts) do
-      {:ok, %Task{status: :working}} ->
-        remaining = deadline - System.monotonic_time(:millisecond)
+  defp remaining(:infinity), do: :infinity
 
-        if remaining > 0 do
-          Process.sleep(min(interval, remaining))
-          poll(task_id, deadline, interval, opts)
-        else
-          {:error, :timeout}
-        end
-
-      result ->
-        result
+  defp remaining(deadline) do
+    case deadline - System.monotonic_time(:millisecond) do
+      remaining when remaining > 0 -> remaining
+      _passed -> :expired
     end
+  end
+
+  defp report_progress(nil, last_progress, _opts), do: last_progress
+  defp report_progress(progress, progress, _opts), do: progress
+
+  defp report_progress(progress, _last_progress, opts) do
+    with on_progress when is_function(on_progress, 1) <- Keyword.get(opts, :on_progress) do
+      on_progress.(progress)
+    end
+
+    progress
   end
 
   # A short database outage must not end a long wait: the job keeps running.

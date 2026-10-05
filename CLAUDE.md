@@ -46,7 +46,7 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 
 The plan and its decisions are in `docs/PLAN.md`.
 
-- `MCPOban`: public API (`enqueue/3`, `status/2`, `get/2`, `await/2`, `cancel/2`, `cancelled?/1`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
+- `MCPOban`: public API (`enqueue/3`, `status/2`, `get/2`, `await/2`, `cancel/2`, `cancelled?/1`, `progress/4`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
 - `MCPOban.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
 - Workers are plain `Oban.Worker` modules. `MCPOban.Telemetry` saves the `perform/1` return value as the task result. `use MCPOban.Tool` in a worker is optional: it keeps `@moduledoc` and the tool options in `__mcp_oban_tool__/0` at compile time, because `Code.fetch_docs/1` does not work during compilation and releases strip docs.
 - `MCPOban.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcp_oban, :task, ...]` events.
@@ -57,4 +57,4 @@ The plan and its decisions are in `docs/PLAN.md`.
 - `examples/report_server`: an example app. Run `mix run demo.exs` in it to check the full flow with real Oban queues.
 - MCPOban uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
 - Tests that kill processes in the middle of a query use `@tag :unsandboxed` (see `test/support/data_case.ex`).
-- Tests need a local Postgres. `test/test_helper.exs` creates the `mcp_oban_test` database and runs the migrations.
+- Tests need a local Postgres. `test/test_helper.exs` drops and creates the `mcp_oban_test` database on each run and runs the migrations, so migration changes always apply.

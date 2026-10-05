@@ -120,6 +120,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
              task_id: task_id,
              status: status,
              meta: meta,
+             progress: progress,
              inserted_at: inserted_at,
              updated_at: updated_at
            } = task
@@ -132,10 +133,14 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
         last_updated_at: DateTime.to_iso8601(updated_at),
         ttl: Map.get(meta, "ttl"),
         poll_interval: Map.get(meta, "poll_interval"),
+        status_message: status_message(status, progress),
         result: call_tool_result(task),
         error: rpc_error(task)
       }
     end
+
+    defp status_message(:working, progress), do: MCPOban.Status.progress_message(progress)
+    defp status_message(_terminal, _progress), do: nil
 
     @doc false
     def call_tool_result(%Task{status: :completed, result: nil}), do: %{"content" => []}

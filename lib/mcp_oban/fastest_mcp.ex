@@ -102,7 +102,9 @@ if Code.ensure_loaded?(FastestMCP) do
 
           [timeout: timeout, interval: _interval] = wait_opts = wait_opts(ctx, opts)
 
-          case MCPOban.await(task_id, wait_opts ++ oban_opts) do
+          on_progress = &send_progress(ctx, &1)
+
+          case MCPOban.await(task_id, [on_progress: on_progress] ++ wait_opts ++ oban_opts) do
             {:ok, task} -> tool_result(task)
             {:error, :timeout} -> timed_out(task_id, timeout, cancel_opts)
             {:error, :not_found} -> tool_error("The task was not found.")
@@ -156,6 +158,16 @@ if Code.ensure_loaded?(FastestMCP) do
       _task_gone -> false
     catch
       :exit, _server_stopped -> false
+    end
+
+    # FastestMCP stores the progress in its task and sends it to the client.
+    defp send_progress(ctx, %{"current" => current} = progress) do
+      FastestMCP.Context.report_progress(
+        ctx,
+        current,
+        Map.get(progress, "total"),
+        Map.get(progress, "message")
+      )
     end
 
     defp timed_out(task_id, timeout, cancel_opts) do

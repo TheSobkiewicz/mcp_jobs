@@ -17,7 +17,7 @@ alias ExMCP.Tasks.Extension
 
 wait = fn wait, task_id ->
   {:ok, %{"status" => status} = task} = ExMCP.Client.get_task(client, task_id)
-  IO.puts("  status: #{status}")
+  IO.puts("  status: #{status} #{Map.get(task, "statusMessage", "")}")
 
   if status == "working" do
     Process.sleep(300)

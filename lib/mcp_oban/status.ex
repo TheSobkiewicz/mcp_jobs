@@ -28,7 +28,29 @@ defmodule MCPOban.Status do
     do: %{status: :completed, result: result}
 
   def to_map(%MCPOban.Task{status: :failed, error: error}), do: %{status: :failed, error: error}
+
+  def to_map(%MCPOban.Task{status: :working, progress: progress}),
+    do: %{status: :working, progress: progress}
+
   def to_map(%MCPOban.Task{status: status}), do: %{status: status}
+
+  @doc false
+  # A short text for MCP task status messages, for example "Rendering (2/5)".
+  @spec progress_message(map() | nil) :: String.t() | nil
+  def progress_message(nil), do: nil
+
+  def progress_message(%{"current" => current} = progress) do
+    count =
+      case progress do
+        %{"total" => total} when is_number(total) -> "#{current}/#{total}"
+        _no_total -> "#{current}"
+      end
+
+    case progress do
+      %{"message" => message} when is_binary(message) -> "#{message} (#{count})"
+      _no_message -> count
+    end
+  end
 
   @failed_message "The task failed."
 
