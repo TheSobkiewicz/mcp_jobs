@@ -8,7 +8,7 @@ defmodule Mix.Tasks.McpJobs.Install do
 
   It creates:
 
-    * a migration for the `mcp_jobs_tasks` table, in the migrations folder of the repo
+    * a migration for the MCPJobs tables, in the migrations folder of the repo
     * an MCP server module, `lib/my_app/mcp_server.ex`, when `ex_mcp` is a dependency
     * with `--phoenix`, the `/mcp` route in the Phoenix router
 

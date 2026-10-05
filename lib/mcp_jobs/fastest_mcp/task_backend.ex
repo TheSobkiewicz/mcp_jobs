@@ -8,7 +8,7 @@ if Code.ensure_loaded?(FastestMCP) do
           task_backend: {MCPJobs.FastestMCP.TaskBackend, oban: Oban}
         )
 
-    It needs the `mcp_jobs_fastest_tasks` table (`MCPJobs.Migration` version 3).
+    It needs the `mcp_jobs_fastest_tasks` table, which `MCPJobs.Migration` creates.
 
     ## After a restart
 

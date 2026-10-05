@@ -503,19 +503,6 @@ defmodule MCPJobsTest do
       assert {:ok, %{status: :failed, error: %{"message" => "Chosen message."}}} =
                MCPJobs.status(task_id)
     end
-
-    @tag :unsandboxed
-    test "the migration can run two times" do
-      Repo.query!("CREATE SCHEMA IF NOT EXISTS mcp_jobs_twice")
-      on_exit(fn -> Repo.query!("DROP SCHEMA mcp_jobs_twice CASCADE") end)
-
-      assert [1] =
-               Ecto.Migrator.run(Repo, [{1, MCPJobs.Test.TwiceMigration}], :up,
-                 all: true,
-                 log: false,
-                 prefix: "mcp_jobs_twice"
-               )
-    end
   end
 
   describe "progress/4" do

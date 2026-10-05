@@ -33,7 +33,7 @@ MCPJobs needs [Oban](https://hexdocs.pm/oban) with PostgreSQL. It does not work 
 mix mcp_jobs.install
 ```
 
-It creates a migration for the `mcp_jobs_tasks` table and, with `ex_mcp`, an MCP server module. Then it prints the next steps. Options: `--repo MyApp.Repo`, `--server MyApp.MCPServer`, `--no-server`, and `--prefix private`.
+It creates a migration for the MCPJobs tables and, with `ex_mcp`, an MCP server module. Then it prints the next steps. Options: `--repo MyApp.Repo`, `--server MyApp.MCPServer`, `--no-server`, and `--prefix private`.
 
 In a Phoenix app, add `--phoenix`. The installer then also adds the MCP server to the router:
 
@@ -59,21 +59,6 @@ end
 ```
 
 If Oban uses a prefix, pass the same prefix: `MCPJobs.Migration.up(prefix: "private")`.
-
-### Upgrading
-
-The `mcp_jobs_tasks` table has a version, stored as a comment on the table. When a new MCPJobs release changes the table, add a migration that runs only the missing versions:
-
-```elixir
-defmodule MyApp.Repo.Migrations.UpgradeMCPJobsTasks do
-  use Ecto.Migration
-
-  def up, do: MCPJobs.Migration.up(version: 3)
-  def down, do: MCPJobs.Migration.down(version: 2)
-end
-```
-
-Version 2 added the `progress` column, and version 3 the `mcp_jobs_fastest_tasks` table for durable FastestMCP tasks. `MCPJobs.Migration.migrated_version/1` returns the version of your database.
 
 If your Oban instance does not have the name `Oban`, set the name:
 
@@ -294,7 +279,7 @@ FastestMCP.start_server(server, task_backend: {MCPJobs.FastestMCP.TaskBackend, o
 
 After a restart, FastestMCP marks unfinished tasks as failed. For a task of an MCPJobs tool, the Oban job is not gone, so the backend keeps the task working and shows the state of the MCPJobs task: its progress while it works, then its result, its error, or `cancelled`. A client can also cancel such a task, and MCPJobs then cancels the job. Options: `:oban`, and `:kill` (a cancel after a restart also kills a running job).
 
-The backend needs `MCPJobs.Migration` version 3.
+The backend uses the `mcp_jobs_fastest_tasks` table, which `MCPJobs.Migration` creates.
 
 ## Use without an MCP library
 
