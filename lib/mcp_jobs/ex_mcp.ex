@@ -139,6 +139,14 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
         @spec server_info() :: map()
         def server_info, do: @mcp_jobs_server_info
 
+        # Modern requests (MCP 2026-07-28) have no `initialize`. ExMCP reads
+        # the capabilities and the server name from these functions.
+        @doc false
+        def __server_capabilities__, do: %{"tools" => %{}}
+
+        @doc false
+        def __server_info__, do: @mcp_jobs_server_info
+
         @impl ExMCP.Server.Handler
         def handle_initialize(params, state),
           do: {:ok, MCPJobs.ExMCP.__initialize__(params, @mcp_jobs_server_info), state}

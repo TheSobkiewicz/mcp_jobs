@@ -12,7 +12,8 @@ origins =
       server_info: DeepThought.MCPServer.server_info(),
       protocol_mode: :prefer_modern,
       allowed_origins: origins,
-      handler_call_timeout: 305_000
+      handler_call_timeout: 305_000,
+      server_info: DeepThought.MCPServer.server_info()
     ],
     port: port,
     protocol_options: [idle_timeout: 310_000]

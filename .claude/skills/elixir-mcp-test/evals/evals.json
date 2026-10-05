@@ -1,0 +1,59 @@
+{
+  "skill_name": "elixir-mcp-test",
+  "evals": [
+    {
+      "id": 1,
+      "name": "exmcp-end-to-end",
+      "prompt": "can you check that the deep thought MCP server (examples/deep_thought, the ExMCP one in serve.exs) actually works end to end? tools list, a task call, cancel, and a failing call. short report pls",
+      "expected_output": "Starts serve.exs on a free port, sends real MCP requests, reports PASS/FAIL for tools/list, completed task, cancelled task, failed task, then stops the server.",
+      "files": [],
+      "assertions": [
+        "Started its own server on the assigned port and did not stop or use the user's server on port 4000",
+        "Sent real MCP requests to the running server (not only ExUnit tests or code reading)",
+        "Stopped every process it started (no listener left on its port)",
+        "Report has a clear PASS/FAIL per check",
+        "tools/list result shows answer_ultimate_question",
+        "A task call reached status completed with answer 42",
+        "A cancel was sent while working and the task ended cancelled",
+        "A failing call ended with status failed and the safe error message",
+        "Report is short (under ~40 lines)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "fastest-with-and-without-tasks",
+      "prompt": "I touched the FastestMCP adapter. Smoke test the FastestMCP example server (examples/deep_thought/serve_fastest.exs) and tell me if tool calls and cancel work both for clients that support MCP tasks and for clients that don't.",
+      "expected_output": "Starts serve_fastest.exs, tests a task-capable client (call, poll, cancel) and a client without tasks (direct result), reports the results per client kind.",
+      "files": [],
+      "assertions": [
+        "Started its own server on the assigned port and did not stop or use the user's server on port 4000",
+        "Sent real MCP requests to the running server (not only ExUnit tests or code reading)",
+        "Stopped every process it started (no listener left on its port)",
+        "Report has a clear PASS/FAIL per check",
+        "Tested a task-capable client: tool call returned a task that completed",
+        "Tested cancel for a task-capable client: task ended cancelled",
+        "Tested a client without tasks: tool call returned the result directly",
+        "Report addresses cancel for clients without tasks (e.g. timeout/disconnect behavior or why it does not apply)",
+        "Report states results separately per client kind"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "retry-and-safe-error",
+      "prompt": "On the live ExMCP deep thought server, verify two things: an Oban retry does not make the MCP task fail (the worker fails on the first attempt), and when the job is discarded the client only sees the safe error message, not the other fields of the worker error. Check the database too.",
+      "expected_output": "Live call shows task stays working through the retry and completes with attempt > 1 in oban_jobs; the 'What is the Ultimate Question?' call ends failed with only the message, no earth_location.",
+      "files": [],
+      "assertions": [
+        "Started its own server on the assigned port and did not stop or use the user's server on port 4000",
+        "Sent real MCP requests to the running server (not only ExUnit tests or code reading)",
+        "Stopped every process it started (no listener left on its port)",
+        "Report has a clear PASS/FAIL per check",
+        "Observed the task status stay working during the retry and then completed",
+        "Database check shows the job attempt > 1 for that task's job",
+        "Discarded-job call ended failed; client response contains the message but not earth_location",
+        "Database check shows the discarded job state (discarded) and the MCPJobs task status failed",
+        "Database queries were filtered to its own task/job IDs"
+      ]
+    }
+  ]
+}

@@ -37,6 +37,7 @@ defmodule Mix.Tasks.McpJobs.InstallTest do
       assert next_steps =~ "MCPJobs.Cleaner"
       assert next_steps =~ "handler: Shop.MCPServer"
       assert next_steps =~ "handler_call_timeout: 305_000"
+      assert next_steps =~ "server_info: Shop.MCPServer.server_info()"
       assert next_steps =~ "idle_timeout: 310_000"
 
       Mix.Tasks.McpJobs.Install.run(["--no-server"])
@@ -72,7 +73,8 @@ defmodule Mix.Tasks.McpJobs.InstallTest do
                  forward "/", ExMCP.HttpPlug,
                    handler: Shop.MCPServer,
                    protocol_mode: :prefer_modern,
-                   handler_call_timeout: 305_000
+                   handler_call_timeout: 305_000,
+                   server_info: Shop.MCPServer.server_info()
                end
              end
              """

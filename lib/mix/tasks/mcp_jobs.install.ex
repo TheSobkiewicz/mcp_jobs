@@ -109,7 +109,8 @@ defmodule Mix.Tasks.McpJobs.Install do
         forward "/", ExMCP.HttpPlug,
           handler: #{server},
           protocol_mode: :prefer_modern,
-          handler_call_timeout: 305_000
+          handler_call_timeout: 305_000,
+          server_info: #{server}.server_info()
       end
     end
     """
@@ -187,13 +188,19 @@ defmodule Mix.Tasks.McpJobs.Install do
                  forward "/mcp", ExMCP.HttpPlug,
                    handler: #{server},
                    protocol_mode: :prefer_modern,
-                   handler_call_timeout: 305_000
+                   handler_call_timeout: 305_000,
+                   server_info: #{server}.server_info()
 
              Or start it alone:
 
                  Plug.Cowboy.http(
                    ExMCP.HttpPlug,
-                   [handler: #{server}, protocol_mode: :prefer_modern, handler_call_timeout: 305_000],
+                   [
+                     handler: #{server},
+                     protocol_mode: :prefer_modern,
+                     handler_call_timeout: 305_000,
+                     server_info: #{server}.server_info()
+                   ],
                    port: 4000,
                    protocol_options: [idle_timeout: 310_000]
                  )
