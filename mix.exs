@@ -11,7 +11,19 @@ defmodule MCPJobs.MixProject do
       deps: deps(),
       description: "Run MCP tool calls as Oban jobs, with MCP Tasks that follow the job state.",
       package: [licenses: ["MIT"]],
-      docs: [main: "readme", extras: ["README.md", "LICENSE"]]
+      docs: [
+        main: "readme",
+        extras: [
+          "README.md",
+          "guides/installation.md",
+          "guides/workers.md",
+          "guides/ex_mcp.md",
+          "guides/fastest_mcp.md",
+          "guides/operations.md",
+          "LICENSE"
+        ],
+        groups_for_extras: [Guides: ~r/guides\//]
+      ]
     ]
   end
 
