@@ -1,8 +1,6 @@
-# McpJobs
+# MCPJobs
 
 A small Elixir library that connects MCP Tasks to Oban jobs. An MCP tool puts its work in an Oban job and gets back a task ID immediately. The MCP task status follows the Oban job state.
-
-The full spec is in `docs/SPEC.md`. Read it before you design or change behavior.
 
 ## Key rules
 
@@ -11,7 +9,7 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 - An Oban retry must not make the MCP task fail. The task fails only when Oban discards the job.
 - Use database constraints for idempotency and state transitions. Do not rely only on application checks.
 - Do not depend on Oban Pro. Only `MCPJobs.ArgsSchema` reads Oban Pro data (`__args_schema__/0`), with no compile-time dependency.
-- Keep to the MVP scope in the spec.
+- Keep the scope small. Ask before you add a large feature.
 
 ## Toolchain
 
@@ -43,8 +41,6 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 - Do not use jargon or technical terms unless they are necessary.
 
 ## Architecture
-
-The plan and its decisions are in `docs/PLAN.md`.
 
 - `MCPJobs`: public API (`enqueue/3`, `status/2`, `get/2`, `await/2`, `cancel/2`, `cancelled?/1`, `progress/4`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
 - `MCPJobs.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.

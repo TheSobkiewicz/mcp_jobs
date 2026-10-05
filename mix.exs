@@ -9,7 +9,9 @@ defmodule MCPJobs.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      docs: [main: "readme", extras: ["README.md"]]
+      description: "Run MCP tool calls as Oban jobs, with MCP Tasks that follow the job state.",
+      package: [licenses: ["MIT"]],
+      docs: [main: "readme", extras: ["README.md", "LICENSE"]]
     ]
   end
 

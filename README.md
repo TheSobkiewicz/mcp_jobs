@@ -2,7 +2,7 @@
 
 Runs MCP tool calls as [Oban](https://hex.pm/packages/oban) jobs.
 
-An MCP client calls a tool. The server gives back a task ID at once, and Oban does the work in the background. The client asks for the task status until the task is done. The MCP task status follows the Oban job state:
+An MCP client calls a tool. The server gives back a task ID at once, and Oban does the work in the background. The client asks for the task status, or listens for task notifications, until the task is done. The MCP task status follows the Oban job state:
 
 | Oban job state                                     | MCP task status |
 | -------------------------------------------------- | --------------- |
@@ -13,7 +13,7 @@ An MCP client calls a tool. The server gives back a task ID at once, and Oban do
 
 A retry does not make a task fail. The task fails only when Oban stops retrying the job.
 
-MCPJobs does not implement the MCP protocol. It includes an adapter for [ExMCP](https://hex.pm/packages/ex_mcp). The core API does not depend on an MCP library.
+MCPJobs does not implement the MCP protocol. It includes adapters for [ExMCP](https://hex.pm/packages/ex_mcp) and [FastestMCP](https://hex.pm/packages/fastest_mcp). The core API does not depend on an MCP library.
 
 ## Installation
 
@@ -443,3 +443,7 @@ Tests need a local Postgres.
 ```sh
 mix test
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
