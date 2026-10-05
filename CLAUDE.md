@@ -24,6 +24,7 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 - `mix compile --warnings-as-errors`: compile
 - `mix test`: run all tests; `mix test path/to/file_test.exs:LINE` runs a single test
 - `mix format`: format the code. Run it before finishing any change.
+- `mix mcpo.install` (in a host app): creates the MCPO migration and an MCP server module.
 
 ## Conventions
 

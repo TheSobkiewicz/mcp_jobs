@@ -57,6 +57,24 @@ defmodule MCPO.ExMCPToolsTest do
     assert [] = MCPO.Tool.options(PlainWorker)
   end
 
+  test "invalid arguments return an error result and start no job" do
+    client = start_client(:prefer_modern)
+
+    assert {:ok, %{"isError" => true, "content" => [%{"text" => text}]}} =
+             ExMCP.Client.call_tool(client, "generate_report", %{"value" => "five"}, format: :map)
+
+    assert text =~ "Invalid arguments: "
+    assert text =~ "value"
+    assert Repo.aggregate(Oban.Job, :count) == 0
+    assert Repo.aggregate(MCPO.Task, :count) == 0
+  end
+
+  test "rejects an invalid input schema" do
+    assert_raise ArgumentError, ~r/invalid input schema for MCPO.Test.PlainWorker/, fn ->
+      MCPO.ExMCP.__tools__([{PlainWorker, input_schema: %{"type" => 5}}])
+    end
+  end
+
   test "an unknown tool returns an error" do
     client = start_client(:prefer_modern)
 

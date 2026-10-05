@@ -20,10 +20,22 @@ MCPO does not implement the MCP protocol. It includes an adapter for [ExMCP](htt
 ```elixir
 def deps do
   [
-    {:mcpo, "~> 0.1"}
+    {:mcpo, "~> 0.1"},
+    # Optional, for the ExMCP adapter:
+    {:ex_mcp, "~> 1.5"}
   ]
 end
 ```
+
+MCPO needs [Oban](https://hexdocs.pm/oban). Set up Oban first, then run:
+
+```sh
+mix mcpo.install
+```
+
+It creates a migration for the `mcpo_tasks` table and, with `ex_mcp`, an MCP server module. Then it prints the next steps. Options: `--repo MyApp.Repo`, `--server MyApp.MCPServer`, `--no-server`, and `--prefix private`.
+
+### Manual setup
 
 MCPO uses the repo of your Oban instance. Add a migration:
 
@@ -124,7 +136,7 @@ Each value comes from the first place that has it:
 | `:description`  | `"Runs MyApp.Workers.SendEmail as a background job."`          |
 | `:input_schema` | `%{"type" => "object"}` (any arguments)                        |
 
-The tool arguments become the job args.
+The tool arguments become the job args. MCPO checks them against the input schema first. Invalid arguments get back a tool result with `"isError": true` and a list of the problems, and no job starts. The AI model can then correct its call. An invalid input schema stops the build with an error.
 
 `use MCPO.ExMCP` is `use ExMCP.Server.Handler` with the MCPO task store. It defines `handle_initialize/2`, `handle_list_tools/2`, and `handle_call_tool/3`. Other handler options are passed on to ExMCP. Set `server_info: %{"name" => ..., "version" => ...}` to change the server name.
 

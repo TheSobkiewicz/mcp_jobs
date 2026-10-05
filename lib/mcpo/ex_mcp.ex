@@ -31,6 +31,10 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       * `:input_schema`: the JSON Schema of the tool arguments. The default
         accepts any object. The arguments become the job args.
 
+    MCPO checks the arguments against the input schema before it inserts a job.
+    Invalid arguments return a tool result with `"isError" => true`, and no job
+    starts. An invalid schema raises at compile time.
+
     A worker with `use MCPO.Tool` gives its own name, description (from
     `@moduledoc`) and input schema. The options in the `tools:` list override them.
 
@@ -88,6 +92,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     `notifications/tasks`, so clients poll with `tasks/get`.
     """
 
+    alias ExMCP.Content.SchemaValidator
     alias ExMCP.Tasks.Extension
     alias MCPO.ExMCP.Store
     alias MCPO.Task
@@ -172,9 +177,25 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
             {:ok, map(), term()} | {:error, term(), term()}
     def __call_tool__(specs, name, arguments, state, opts) do
       case Enum.find(specs, &match?(%{name: ^name}, &1)) do
-        %{worker: worker} -> create_task(name, worker, arguments, state, opts)
-        nil -> {:error, "Unknown tool: #{name}", state}
+        %{worker: worker, input_schema: schema} ->
+          case SchemaValidator.validate_schema(arguments, schema) do
+            :ok -> create_task(name, worker, arguments, state, opts)
+            {:error, errors} -> {:ok, tool_error(invalid_arguments(errors)), state}
+          end
+
+        nil ->
+          {:error, "Unknown tool: #{name}", state}
       end
+    end
+
+    defp invalid_arguments(errors) do
+      details =
+        Enum.map_join(errors, "; ", fn
+          %{field: field, message: message} when field in [nil, ""] -> message
+          %{field: field, message: message} -> "#{field}: #{message}"
+        end)
+
+      "Invalid arguments: " <> details
     end
 
     defp tool_spec(worker) when is_atom(worker), do: tool_spec({worker, []})
@@ -187,13 +208,22 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       end
 
       opts = Keyword.merge(MCPO.Tool.options(worker), opts)
+      input_schema = Keyword.get(opts, :input_schema, %{"type" => "object"})
+
+      case SchemaValidator.compile_schema(input_schema) do
+        {:ok, _compiled} ->
+          :ok
+
+        {:error, reason} ->
+          raise ArgumentError, "invalid input schema for #{inspect(worker)}: #{inspect(reason)}"
+      end
 
       %{
         name: Keyword.get_lazy(opts, :name, fn -> default_name(worker) end),
         worker: worker,
         description:
           Keyword.get(opts, :description, "Runs #{inspect(worker)} as a background job."),
-        input_schema: Keyword.get(opts, :input_schema, %{"type" => "object"})
+        input_schema: input_schema
       }
     end
 
