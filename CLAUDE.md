@@ -1,4 +1,4 @@
-# McpOban
+# McpJobs
 
 A small Elixir library that connects MCP Tasks to Oban jobs. An MCP tool puts its work in an Oban job and gets back a task ID immediately. The MCP task status follows the Oban job state.
 
@@ -10,7 +10,7 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 - Keep the library small and simple. Do not repeat what Oban already does.
 - An Oban retry must not make the MCP task fail. The task fails only when Oban discards the job.
 - Use database constraints for idempotency and state transitions. Do not rely only on application checks.
-- Do not depend on Oban Pro. Only `MCPOban.ArgsSchema` reads Oban Pro data (`__args_schema__/0`), with no compile-time dependency.
+- Do not depend on Oban Pro. Only `MCPJobs.ArgsSchema` reads Oban Pro data (`__args_schema__/0`), with no compile-time dependency.
 - Keep to the MVP scope in the spec.
 
 ## Toolchain
@@ -24,7 +24,7 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 - `mix compile --warnings-as-errors`: compile
 - `mix test`: run all tests; `mix test path/to/file_test.exs:LINE` runs a single test
 - `mix format`: format the code. Run it before finishing any change.
-- `mix mcp_oban.install` (in a host app): creates the MCPOban migration and an MCP server module.
+- `mix mcp_jobs.install` (in a host app): creates the MCPJobs migration and an MCP server module.
 
 ## Conventions
 
@@ -46,17 +46,17 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 
 The plan and its decisions are in `docs/PLAN.md`.
 
-- `MCPOban`: public API (`enqueue/3`, `status/2`, `get/2`, `await/2`, `cancel/2`, `cancelled?/1`, `progress/4`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
-- `MCPOban.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
-- Workers are plain `Oban.Worker` modules. `MCPOban.Telemetry` saves the `perform/1` return value as the task result. `use MCPOban.Tool` in a worker is optional: it keeps `@moduledoc` and the tool options in `__mcp_oban_tool__/0` at compile time, because `Code.fetch_docs/1` does not work during compilation and releases strip docs.
-- `MCPOban.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcp_oban, :task, ...]` events, including `:progress`. The metadata has `:oban`, the Oban instance name.
-- `MCPOban.Application`: attaches the telemetry handlers. It starts no processes.
-- `MCPOban.ExMCP.Notifications`: a telemetry handler that publishes `notifications/tasks` for tasks of `MCPOban.ExMCP.Store` (meta `"ex_mcp" => true`) to ExMCP listeners.
-- `MCPOban.ExMCP` and `MCPOban.ExMCP.Store`: the ExMCP adapter. `use MCPOban.ExMCP, tools: [Worker, ...]` generates the handler callbacks. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
-- `MCPOban.FastestMCP`: the FastestMCP adapter (`add_tools/3`). Each tool inserts a job and waits for it; FastestMCP owns the MCP task. A watcher process cancels the MCPOban task when FastestMCP kills the waiting tool. Also optional and inside `if Code.ensure_loaded?(...)`.
-- `MCPOban.FastestMCP.TaskBackend`: a FastestMCP `TaskBackend` on the `mcp_oban_fastest_tasks` table (migration version 3). After a restart it keeps tasks of MCPOban tools working and shows the MCPOban task state, using `FastestMCP.ResultNormalizer.normalize_tool/1` for results.
-- `MCPOban.ToolSpec`: builds the tool list (name, description, input schema) for both adapters.
+- `MCPJobs`: public API (`enqueue/3`, `status/2`, `get/2`, `await/2`, `cancel/2`, `cancelled?/1`, `progress/4`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
+- `MCPJobs.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
+- Workers are plain `Oban.Worker` modules. `MCPJobs.Telemetry` saves the `perform/1` return value as the task result. `use MCPJobs.Tool` in a worker is optional: it keeps `@moduledoc` and the tool options in `__mcp_jobs_tool__/0` at compile time, because `Code.fetch_docs/1` does not work during compilation and releases strip docs.
+- `MCPJobs.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcp_jobs, :task, ...]` events, including `:progress`. The metadata has `:oban`, the Oban instance name.
+- `MCPJobs.Application`: attaches the telemetry handlers. It starts no processes.
+- `MCPJobs.ExMCP.Notifications`: a telemetry handler that publishes `notifications/tasks` for tasks of `MCPJobs.ExMCP.Store` (meta `"ex_mcp" => true`) to ExMCP listeners.
+- `MCPJobs.ExMCP` and `MCPJobs.ExMCP.Store`: the ExMCP adapter. `use MCPJobs.ExMCP, tools: [Worker, ...]` generates the handler callbacks. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
+- `MCPJobs.FastestMCP`: the FastestMCP adapter (`add_tools/3`). Each tool inserts a job and waits for it; FastestMCP owns the MCP task. A watcher process cancels the MCPJobs task when FastestMCP kills the waiting tool. Also optional and inside `if Code.ensure_loaded?(...)`.
+- `MCPJobs.FastestMCP.TaskBackend`: a FastestMCP `TaskBackend` on the `mcp_jobs_fastest_tasks` table (migration version 3). After a restart it keeps tasks of MCPJobs tools working and shows the MCPJobs task state, using `FastestMCP.ResultNormalizer.normalize_tool/1` for results.
+- `MCPJobs.ToolSpec`: builds the tool list (name, description, input schema) for both adapters.
 - `examples/report_server`: an example app. Run `mix run demo.exs` in it to check the full flow with real Oban queues.
-- MCPOban uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
+- MCPJobs uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
 - Tests that kill processes in the middle of a query use `@tag :unsandboxed` (see `test/support/data_case.ex`).
-- Tests need a local Postgres. `test/test_helper.exs` drops and creates the `mcp_oban_test` database on each run and runs the migrations, so migration changes always apply.
+- Tests need a local Postgres. `test/test_helper.exs` drops and creates the `mcp_jobs_test` database on each run and runs the migrations, so migration changes always apply.

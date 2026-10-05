@@ -1,9 +1,9 @@
-defmodule MCPOban.Test.TwiceMigration do
+defmodule MCPJobs.Test.TwiceMigration do
   @moduledoc false
   use Ecto.Migration
 
   def up do
-    MCPOban.Migration.up(prefix: "mcp_oban_twice")
-    MCPOban.Migration.up(prefix: "mcp_oban_twice")
+    MCPJobs.Migration.up(prefix: "mcp_jobs_twice")
+    MCPJobs.Migration.up(prefix: "mcp_jobs_twice")
   end
 end

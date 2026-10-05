@@ -1,19 +1,19 @@
-defmodule MCPOban.DataCase do
+defmodule MCPJobs.DataCase do
   @moduledoc false
 
   use ExUnit.CaseTemplate
 
   alias Ecto.Adapters.SQL.Sandbox
-  alias MCPOban.Test.Repo
+  alias MCPJobs.Test.Repo
 
   using do
     quote do
-      use Oban.Testing, repo: MCPOban.Test.Repo
+      use Oban.Testing, repo: MCPJobs.Test.Repo
 
       import Ecto.Query
-      import MCPOban.DataCase
+      import MCPJobs.DataCase
 
-      alias MCPOban.Test.Repo
+      alias MCPJobs.Test.Repo
     end
   end
 
@@ -25,7 +25,7 @@ defmodule MCPOban.DataCase do
       Sandbox.mode(Repo, :auto)
 
       on_exit(fn ->
-        Repo.delete_all(MCPOban.Task)
+        Repo.delete_all(MCPJobs.Task)
         Repo.delete_all(Oban.Job)
         Sandbox.mode(Repo, :manual)
       end)
@@ -84,14 +84,14 @@ defmodule MCPOban.DataCase do
     end
   end
 
-  @doc "Sends `{:telemetry, event, measurements, metadata}` to the test process for MCPOban events."
+  @doc "Sends `{:telemetry, event, measurements, metadata}` to the test process for MCPJobs events."
   def attach_telemetry do
     test_pid = self()
     handler_id = "test-#{inspect(make_ref())}"
 
     events =
       for event <- [:started, :completed, :failed, :cancelled, :progress],
-          do: [:mcp_oban, :task, event]
+          do: [:mcp_jobs, :task, event]
 
     :telemetry.attach_many(
       handler_id,

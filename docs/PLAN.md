@@ -1,4 +1,4 @@
-# MCPOban implementation plan
+# MCPJobs implementation plan
 
 ## Facts that shape the design
 
@@ -15,15 +15,15 @@
 
 | Module | Job |
 |---|---|
-| `MCPOban` | Public API: `enqueue/3`, `status/1`, `cancel/1`, `cancelled?/1` |
-| `MCPOban.Task` | Ecto schema for `mcp_oban_tasks` |
-| `MCPOban.Repository` | All queries. Each status change is a conditional update (`WHERE status = 'working'`). |
-| `MCPOban.Worker` | `use MCPOban.Worker`. You write `run/1`. The wrapper saves the result. |
-| `MCPOban.Telemetry` | Listens to Oban events. Sends `[:mcp_oban, :task, ...]` events. |
-| `MCPOban.Migration` | `up/0` and `down/0`, used from the host app's migration (the same pattern as Oban) |
-| `MCPOban.Cleaner` | Oban worker that deletes old terminal tasks. The host schedules it with Oban Cron. |
+| `MCPJobs` | Public API: `enqueue/3`, `status/1`, `cancel/1`, `cancelled?/1` |
+| `MCPJobs.Task` | Ecto schema for `mcp_jobs_tasks` |
+| `MCPJobs.Repository` | All queries. Each status change is a conditional update (`WHERE status = 'working'`). |
+| `MCPJobs.Worker` | `use MCPJobs.Worker`. You write `run/1`. The wrapper saves the result. |
+| `MCPJobs.Telemetry` | Listens to Oban events. Sends `[:mcp_jobs, :task, ...]` events. |
+| `MCPJobs.Migration` | `up/0` and `down/0`, used from the host app's migration (the same pattern as Oban) |
+| `MCPJobs.Cleaner` | Oban worker that deletes old terminal tasks. The host schedules it with Oban Cron. |
 
-### Table `mcp_oban_tasks`
+### Table `mcp_jobs_tasks`
 
 - `task_id`: string, unique index
 - `oban_job_id`: bigint, index, no foreign key (Oban's pruner deletes jobs)
@@ -47,17 +47,17 @@
 
 ## Adapters (optional dependencies)
 
-- `MCPOban.ExMCP`: implements `ExMCP.Tasks.Store` on the table, plus a helper to call from `handle_call_tool/3`.
-- `MCPOban.FastestMCP`: a later step. Its process model conflicts with Oban, so it needs a proxy handler.
+- `MCPJobs.ExMCP`: implements `ExMCP.Tasks.Store` on the table, plus a helper to call from `handle_call_tool/3`.
+- `MCPJobs.FastestMCP`: a later step. Its process model conflicts with Oban, so it needs a proxy handler.
 
 ## Build order
 
 Each step ends with passing tests.
 
 1. Test setup: Postgres repo, Oban in `:manual` testing mode, `Ecto.Adapters.SQL.Sandbox`
-2. Migration and `MCPOban.Task` schema
+2. Migration and `MCPJobs.Task` schema
 3. `enqueue/3` with duplicate protection
-4. `MCPOban.Worker` with success and retry tests
+4. `MCPJobs.Worker` with success and retry tests
 5. Telemetry handler with final failure tests
 6. `cancel/1` and `cancelled?/1`
 7. Race tests: complete versus cancel, discard versus cancel
@@ -70,7 +70,7 @@ Each step ends with passing tests.
 
 1. **Running job on cancel:** `Oban.cancel_job` kills the process. Pick one:
    - (a) Kill the process.
-   - (b) Only mark the task `cancelled`, and let the worker check `MCPOban.cancelled?/1`. This is cooperative.
+   - (b) Only mark the task `cancelled`, and let the worker check `MCPJobs.cancelled?/1`. This is cooperative.
    - (c) Cooperative by default, with an option to kill.
 2. **MCP version:** support only v2 (current spec, supported by ExMCP), or v1 too?
 3. **FastestMCP:** include it in the MVP, or add it after the ExMCP adapter works?
@@ -89,28 +89,28 @@ Each step ends with passing tests.
 
 ## Interface simplification (2026-10-02)
 
-- Removed `MCPOban.Worker`. Workers are plain `Oban.Worker` modules. The telemetry handler saves the `perform/1` return value. Trade-off: if the node stops after Oban marks the job completed and before the result is saved, the task is completed with no result.
+- Removed `MCPJobs.Worker`. Workers are plain `Oban.Worker` modules. The telemetry handler saves the `perform/1` return value. Trade-off: if the node stops after Oban marks the job completed and before the result is saved, the task is completed with no result.
 - Public API is `enqueue/3`, `status/2`, `get/2`, `cancel/2`, `cancelled?/1`.
-- `use MCPOban.ExMCP` sets up the ExMCP handler and imports `create_task/4`.
+- `use MCPJobs.ExMCP` sets up the ExMCP handler and imports `create_task/4`.
 
 ## Clients without tasks (2026-10-02)
 
-Test with the MCP Inspector (TypeScript SDK 1.29, latest protocol `2025-11-25`) showed that it does not know the MCP Tasks extension. Decision: fallback. When a client does not declare the extension, `MCPOban.ExMCP.create_task` waits for the job with `MCPOban.await/2` and returns the tool result directly. On `:wait_timeout` the task is cancelled. Tools use `taskSupport: "optional"`.
+Test with the MCP Inspector (TypeScript SDK 1.29, latest protocol `2025-11-25`) showed that it does not know the MCP Tasks extension. Decision: fallback. When a client does not declare the extension, `MCPJobs.ExMCP.create_task` waits for the job with `MCPJobs.await/2` and returns the tool result directly. On `:wait_timeout` the task is cancelled. Tools use `taskSupport: "optional"`.
 
 ## Tools list (2026-10-02)
 
-`use MCPOban.ExMCP, tools: [Worker, {Worker, name: ..., description: ..., input_schema: ...}]` generates `handle_initialize/2`, `handle_list_tools/2` and `handle_call_tool/3`. They are overridable and support `super`.
-`use MCPOban.Tool, input_schema: ...` in a worker gives the name, description (from `@moduledoc`) and input schema. Priority: `tools:` options, then `MCPOban.Tool` options, then `@moduledoc`, then defaults. `Code.fetch_docs/1` cannot read docs of modules compiled in the same build, and `mix release` strips docs, so the values are kept at worker compile time.
+`use MCPJobs.ExMCP, tools: [Worker, {Worker, name: ..., description: ..., input_schema: ...}]` generates `handle_initialize/2`, `handle_list_tools/2` and `handle_call_tool/3`. They are overridable and support `super`.
+`use MCPJobs.Tool, input_schema: ...` in a worker gives the name, description (from `@moduledoc`) and input schema. Priority: `tools:` options, then `MCPJobs.Tool` options, then `@moduledoc`, then defaults. `Code.fetch_docs/1` cannot read docs of modules compiled in the same build, and `mix release` strips docs, so the values are kept at worker compile time.
 
 ## Argument checks and installer (2026-10-02)
 
 - Listed tools check the arguments against `input_schema` with `ExMCP.Content.SchemaValidator` (ExJsonSchema, with ExMCP's schema limits) before a job is inserted. Invalid arguments return an `isError` tool result. The schema is compiled at compile time.
-- `mix mcp_oban.install` is a plain Mix task (no Igniter): it creates the migration and, with `ex_mcp`, an MCP server module, then prints the next steps.
+- `mix mcp_jobs.install` is a plain Mix task (no Igniter): it creates the migration and, with `ex_mcp`, an MCP server module, then prints the next steps.
 - Later: explain per-tool job options (idea 2) to the user.
 
 ## Oban Pro args_schema (2026-10-05)
 
-The spec excludes Oban Pro features from the MVP. On user request, MCPOban now reads the `args_schema` of an Oban Pro worker (`__args_schema__/0`, undocumented by Pro, same format in Pro 1.5 to 1.7.10) and builds the input schema from it. There is no dependency on Oban Pro. Tests use a fake worker with the same format. Checked once with real Oban Pro 1.7.10: MCPOban and Pro accept and reject the same arguments.
+The spec excludes Oban Pro features from the MVP. On user request, MCPJobs now reads the `args_schema` of an Oban Pro worker (`__args_schema__/0`, undocumented by Pro) and builds the input schema from it. There is no dependency on Oban Pro. Tests use a fake worker with the same format.
 
 ## Review (2026-10-05)
 
@@ -144,9 +144,9 @@ Still open (one reviewer each, confirmed by research): ExMCP adds `_request_id`/
 
 ## FastestMCP adapter (2026-10-05)
 
-`MCPOban.FastestMCP.add_tools/3` adds one FastestMCP tool per worker. The tool handler inserts the job and waits for it (`MCPOban.await/2`, `:infinity` for background tasks). FastestMCP owns the MCP task, supports Tasks v1 and v2, and handles clients without tasks. On `tasks/cancel`, FastestMCP kills the tool process; a watcher process then calls `MCPOban.cancel/2`. The tool rules moved to `MCPOban.ToolSpec` and are shared with the ExMCP adapter. Checked with the MCP Inspector over HTTP (`examples/report_server/serve_fastest.exs`).
+`MCPJobs.FastestMCP.add_tools/3` adds one FastestMCP tool per worker. The tool handler inserts the job and waits for it (`MCPJobs.await/2`, `:infinity` for background tasks). FastestMCP owns the MCP task, supports Tasks v1 and v2, and handles clients without tasks. On `tasks/cancel`, FastestMCP kills the tool process; a watcher process then calls `MCPJobs.cancel/2`. The tool rules moved to `MCPJobs.ToolSpec` and are shared with the ExMCP adapter. Checked with the MCP Inspector over HTTP (`examples/report_server/serve_fastest.exs`).
 
-Limit: FastestMCP tasks are in memory, so they do not survive a restart, although the Oban job and the MCPOban task do.
+Limit: FastestMCP tasks are in memory, so they do not survive a restart, although the Oban job and the MCPJobs task do.
 
 ## Release review (2026-10-05)
 
@@ -173,32 +173,36 @@ Second review of these fixes (3 reviewers), all fixed:
 
 Ordered by value. Status in brackets.
 
-1. Progress messages: `MCPOban.progress(job, current, total, message)` in a worker; clients see it (FastestMCP progress, ExMCP task status message). [done]
-2. Functions as tools without a worker: a generic worker runs `{Module, :function, arity}` entries in `tools:`.
-3. Per-tool job options in `tools:` (`job: [queue:, priority:, max_attempts:, unique:]`).
+1. Progress messages: `MCPJobs.progress(job, current, total, message)` in a worker; clients see it (FastestMCP progress, ExMCP task status message). [done]
+2. Functions as tools without a worker: a generic worker runs `{Module, :function, arity}` entries in `tools:`. [rejected by the user, 2026-10-05]
+3. Per-tool job options in `tools:` (`job: [queue:, priority:, max_attempts:, unique:]`). [rejected by the user, 2026-10-05]
 4. Ask the user during a job (MCP `input_required`).
 5. Oban tools for AI agents: list queues, failed jobs and errors, retry or cancel.
-6. Durable FastestMCP tasks: a FastestMCP TaskBackend on `mcp_oban_fastest_tasks`. [done]
-7. `mix mcp_oban.install --phoenix` adds the `forward "/mcp"` route. [done]
+6. Durable FastestMCP tasks: a FastestMCP TaskBackend on `mcp_jobs_fastest_tasks`. [done]
+7. `mix mcp_jobs.install --phoenix` adds the `forward "/mcp"` route. [done]
 8. Push notifications (`notifications/tasks`) on task changes. [done]
 
 Also open: Hex package metadata and license (publishing postponed); release-review single findings (ExMCP fallback ignores `notifications/cancelled`; `"content"` lists not checked for block shape; no tests for an Oban prefix, real queues, the snooze branch). The migration version finding is fixed.
 
 ## Progress messages (2026-10-05)
 
-`MCPOban.progress(job, current, total, message)` saves a `progress` map on the working task (new `progress` column, added with `add_if_not_exists`). `MCPOban.await/2` calls `:on_progress` on each change. ExMCP shows it as the task `statusMessage` and sends progress notifications in the fallback; FastestMCP forwards it to `FastestMCP.Context.report_progress/4`.
+`MCPJobs.progress(job, current, total, message)` saves a `progress` map on the working task (new `progress` column, added with `add_if_not_exists`). `MCPJobs.await/2` calls `:on_progress` on each change. ExMCP shows it as the task `statusMessage` and sends progress notifications in the fallback; FastestMCP forwards it to `FastestMCP.Context.report_progress/4`.
 
-Found on the way: an existing database did not get the new column, because the migration had no version (release-review single finding). Fixed: `MCPOban.Migration` now has versions like Oban (version 1: table; version 2: `progress`), stored as a table comment; a table without a comment counts as version 1. The test helper now drops and creates the test database on each run.
+Found on the way: an existing database did not get the new column, because the migration had no version (release-review single finding). Fixed: `MCPJobs.Migration` now has versions like Oban (version 1: table; version 2: `progress`), stored as a table comment; a table without a comment counts as version 1. The test helper now drops and creates the test database on each run.
 
 ## Durable FastestMCP tasks and Phoenix installer (2026-10-05)
 
-- `MCPOban.FastestMCP.TaskBackend` implements `FastestMCP.TaskBackend` on `mcp_oban_fastest_tasks` (migration version 3; task data in Erlang term format). On startup FastestMCP marks running tasks as failed ("runtime restarted"); for tasks of MCPOban tools the backend keeps them working, and on read it shows the MCPOban state (progress, result via `FastestMCP.ResultNormalizer.normalize_tool/1`, error, cancelled). A cancel after a restart cancels the job through the backend. A test compares the rebuilt result with a real FastestMCP result.
-- `mix mcp_oban.install --phoenix` adds `scope "/mcp" do forward "/", ExMCP.HttpPlug, ... end` before the end of the router. Checked in a minimal Phoenix 1.8 app with Plug.Parsers (ExMCP accepts an already parsed body) and the MCP Inspector.
+- `MCPJobs.FastestMCP.TaskBackend` implements `FastestMCP.TaskBackend` on `mcp_jobs_fastest_tasks` (migration version 3; task data in Erlang term format). On startup FastestMCP marks running tasks as failed ("runtime restarted"); for tasks of MCPJobs tools the backend keeps them working, and on read it shows the MCPJobs state (progress, result via `FastestMCP.ResultNormalizer.normalize_tool/1`, error, cancelled). A cancel after a restart cancels the job through the backend. A test compares the rebuilt result with a real FastestMCP result.
+- `mix mcp_jobs.install --phoenix` adds `scope "/mcp" do forward "/", ExMCP.HttpPlug, ... end` before the end of the router. Checked in a minimal Phoenix 1.8 app with Plug.Parsers (ExMCP accepts an already parsed body) and the MCP Inspector.
 
 ## Task notifications (2026-10-05)
 
-- New telemetry event `[:mcp_oban, :task, :progress]`, sent when `MCPOban.progress/4` changes a working task. All task events have `:oban` (the Oban instance name) in the metadata.
-- `MCPOban.ExMCP.Notifications` (attached by `MCPOban.Application` when ExMCP is loaded) listens to the completed, failed, cancelled and progress events. For tasks that `MCPOban.ExMCP.Store` created (meta `"ex_mcp" => true`), it publishes `notifications/tasks` with `ExMCP.Server.Subscriptions.publish_async/3`. ExMCP authorizes the `"taskIds"` filter with `Store.fetch/3` when a client listens, so only the task owner gets the notifications.
+- New telemetry event `[:mcp_jobs, :task, :progress]`, sent when `MCPJobs.progress/4` changes a working task. All task events have `:oban` (the Oban instance name) in the metadata.
+- `MCPJobs.ExMCP.Notifications` (attached by `MCPJobs.Application` when ExMCP is loaded) listens to the completed, failed, cancelled and progress events. For tasks that `MCPJobs.ExMCP.Store` created (meta `"ex_mcp" => true`), it publishes `notifications/tasks` with `ExMCP.Server.Subscriptions.publish_async/3`. ExMCP authorizes the `"taskIds"` filter with `Store.fetch/3` when a client listens, so only the task owner gets the notifications.
 - ExMCP already notifies for its own changes (create, `tasks/cancel`). A cancel through ExMCP can send two notifications with the same state; the listener queue coalesces them.
-- The default registry is node-local. Registry option: `config :mcp_oban, ex_mcp_subscription_registry:`.
+- The default registry is node-local. Registry option: `config :mcp_jobs, ex_mcp_subscription_registry:`.
 - FastestMCP sends its own task notifications. Not covered: tasks that the durable backend kept after a restart have no tool process, so they get no notifications.
+
+## Rename to MCPJobs (2026-10-05)
+
+The name must not contain "Oban". Package `:mcp_jobs` (free on Hex), module `MCPJobs`, tables `mcp_jobs_tasks` and `mcp_jobs_fastest_tasks`, config `:mcp_jobs`, telemetry prefix `[:mcp_jobs, :task, ...]`, installer `mix mcp_jobs.install`. Older sections of this file use the new names too. `docs/SPEC.md` keeps the original names.
