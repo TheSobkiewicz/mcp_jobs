@@ -4,7 +4,7 @@ port = String.to_integer(System.get_env("PORT", "4001"))
   "report-server"
   |> FastestMCP.server()
   |> MCPOban.FastestMCP.add_tools([ReportServer.Workers.GenerateReport])
-  |> FastestMCP.start_server()
+  |> FastestMCP.start_server(task_backend: {MCPOban.FastestMCP.TaskBackend, oban: Oban})
 
 {:ok, _pid} =
   Supervisor.start_link(

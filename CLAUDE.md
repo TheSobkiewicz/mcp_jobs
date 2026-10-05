@@ -53,6 +53,7 @@ The plan and its decisions are in `docs/PLAN.md`.
 - `MCPOban.Application`: attaches the telemetry handler. It starts no processes.
 - `MCPOban.ExMCP` and `MCPOban.ExMCP.Store`: the ExMCP adapter. `use MCPOban.ExMCP, tools: [Worker, ...]` generates the handler callbacks. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
 - `MCPOban.FastestMCP`: the FastestMCP adapter (`add_tools/3`). Each tool inserts a job and waits for it; FastestMCP owns the MCP task. A watcher process cancels the MCPOban task when FastestMCP kills the waiting tool. Also optional and inside `if Code.ensure_loaded?(...)`.
+- `MCPOban.FastestMCP.TaskBackend`: a FastestMCP `TaskBackend` on the `mcp_oban_fastest_tasks` table (migration version 3). After a restart it keeps tasks of MCPOban tools working and shows the MCPOban task state, using `FastestMCP.ResultNormalizer.normalize_tool/1` for results.
 - `MCPOban.ToolSpec`: builds the tool list (name, description, input schema) for both adapters.
 - `examples/report_server`: an example app. Run `mix run demo.exs` in it to check the full flow with real Oban queues.
 - MCPOban uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.

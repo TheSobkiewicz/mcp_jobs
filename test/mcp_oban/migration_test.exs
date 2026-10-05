@@ -35,11 +35,19 @@ defmodule MCPOban.MigrationTest do
     rows != []
   end
 
+  defp fastest_table? do
+    %{rows: [[found]]} =
+      Repo.query!("SELECT to_regclass($1) IS NOT NULL", [~s("#{@schema}".mcp_oban_fastest_tasks)])
+
+    found
+  end
+
   test "a new install gets the current version" do
     migrate(:up, [{1, MigrationLatest}], all: true)
 
-    assert version() == "2"
+    assert version() == "3"
     assert progress_column?()
+    assert fastest_table?()
   end
 
   test "an upgrade from version 1 adds the progress column" do
@@ -48,8 +56,9 @@ defmodule MCPOban.MigrationTest do
     refute progress_column?()
 
     migrate(:up, [{1, MigrationV1}, {2, MigrationLatest}], all: true)
-    assert version() == "2"
+    assert version() == "3"
     assert progress_column?()
+    assert fastest_table?()
   end
 
   test "a table from before versions counts as version 1" do
@@ -57,7 +66,7 @@ defmodule MCPOban.MigrationTest do
     Repo.query!(~s(COMMENT ON TABLE "#{@schema}".mcp_oban_tasks IS NULL))
 
     migrate(:up, [{1, MigrationV1}, {2, MigrationLatest}], all: true)
-    assert version() == "2"
+    assert version() == "3"
     assert progress_column?()
   end
 
@@ -67,6 +76,7 @@ defmodule MCPOban.MigrationTest do
     migrate(:down, [{1, MigrationV1}, {2, MigrationLatest}], step: 1)
     assert version() == "1"
     refute progress_column?()
+    refute fastest_table?()
 
     migrate(:down, [{1, MigrationV1}, {2, MigrationLatest}], step: 1)
 

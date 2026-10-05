@@ -183,6 +183,10 @@ if Code.ensure_loaded?(FastestMCP) do
       end
     end
 
+    @doc false
+    @spec __tool_result__(Task.t()) :: Result.t()
+    def __tool_result__(task), do: tool_result(task)
+
     defp tool_result(%Task{status: :completed, result: nil}), do: Result.new([])
 
     defp tool_result(%Task{status: :completed, result: %{"content" => content} = result})

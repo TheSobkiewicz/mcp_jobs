@@ -178,8 +178,8 @@ Ordered by value. Status in brackets.
 3. Per-tool job options in `tools:` (`job: [queue:, priority:, max_attempts:, unique:]`).
 4. Ask the user during a job (MCP `input_required`).
 5. Oban tools for AI agents: list queues, failed jobs and errors, retry or cancel.
-6. Durable FastestMCP tasks: a FastestMCP TaskBackend on `mcp_oban_tasks`.
-7. `mix mcp_oban.install --phoenix` adds the `forward "/mcp"` route.
+6. Durable FastestMCP tasks: a FastestMCP TaskBackend on `mcp_oban_fastest_tasks`. [done]
+7. `mix mcp_oban.install --phoenix` adds the `forward "/mcp"` route. [done]
 8. Push notifications (`notifications/tasks`) on task changes.
 
 Also open: Hex package metadata and license (publishing postponed); release-review single findings (ExMCP fallback ignores `notifications/cancelled`; `"content"` lists not checked for block shape; no tests for an Oban prefix, real queues, the snooze branch). The migration version finding is fixed.
@@ -189,3 +189,8 @@ Also open: Hex package metadata and license (publishing postponed); release-revi
 `MCPOban.progress(job, current, total, message)` saves a `progress` map on the working task (new `progress` column, added with `add_if_not_exists`). `MCPOban.await/2` calls `:on_progress` on each change. ExMCP shows it as the task `statusMessage` and sends progress notifications in the fallback; FastestMCP forwards it to `FastestMCP.Context.report_progress/4`.
 
 Found on the way: an existing database did not get the new column, because the migration had no version (release-review single finding). Fixed: `MCPOban.Migration` now has versions like Oban (version 1: table; version 2: `progress`), stored as a table comment; a table without a comment counts as version 1. The test helper now drops and creates the test database on each run.
+
+## Durable FastestMCP tasks and Phoenix installer (2026-10-05)
+
+- `MCPOban.FastestMCP.TaskBackend` implements `FastestMCP.TaskBackend` on `mcp_oban_fastest_tasks` (migration version 3; task data in Erlang term format). On startup FastestMCP marks running tasks as failed ("runtime restarted"); for tasks of MCPOban tools the backend keeps them working, and on read it shows the MCPOban state (progress, result via `FastestMCP.ResultNormalizer.normalize_tool/1`, error, cancelled). A cancel after a restart cancels the job through the backend. A test compares the rebuilt result with a real FastestMCP result.
+- `mix mcp_oban.install --phoenix` adds `scope "/mcp" do forward "/", ExMCP.HttpPlug, ... end` before the end of the router. Checked in a minimal Phoenix 1.8 app with Plug.Parsers (ExMCP accepts an already parsed body) and the MCP Inspector.

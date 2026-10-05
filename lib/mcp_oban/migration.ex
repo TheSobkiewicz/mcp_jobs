@@ -18,7 +18,7 @@ defmodule MCPOban.Migration do
       defmodule MyApp.Repo.Migrations.UpgradeMCPObanTasks do
         use Ecto.Migration
 
-        def up, do: MCPOban.Migration.up(version: 2)
+        def up, do: MCPOban.Migration.up(version: 3)
         def down, do: MCPOban.Migration.down(version: 2)
       end
 
@@ -26,6 +26,7 @@ defmodule MCPOban.Migration do
 
     * 1: the table, its indexes and the status constraint.
     * 2: the `progress` column.
+    * 3: the `mcp_oban_fastest_tasks` table, for `MCPOban.FastestMCP.TaskBackend`.
 
   The table must be in the same prefix as the Oban tables. Pass `prefix: "..."`
   when Oban uses a prefix other than `"public"`.
@@ -35,7 +36,7 @@ defmodule MCPOban.Migration do
 
   use Ecto.Migration
 
-  @current_version 2
+  @current_version 3
 
   @doc """
   Upgrades the table to `:version` (default: the current version).
@@ -153,6 +154,29 @@ defmodule MCPOban.Migration do
     alter table(:mcp_oban_tasks, prefix: prefix) do
       remove_if_exists :progress, :map
     end
+  end
+
+  defp change(3, :up, prefix) do
+    create_if_not_exists table(:mcp_oban_fastest_tasks, primary_key: false, prefix: prefix) do
+      add :task_id, :string, primary_key: true
+      add :session_id, :string
+      add :owner_fingerprint, :string
+      add :submitted_at, :bigint, null: false
+      add :expires_at, :bigint
+      add :data, :binary, null: false
+    end
+
+    create_if_not_exists index(:mcp_oban_fastest_tasks, [:submitted_at, :task_id], prefix: prefix)
+
+    create_if_not_exists index(:mcp_oban_fastest_tasks, [:session_id, :submitted_at, :task_id],
+                           prefix: prefix
+                         )
+
+    create_if_not_exists index(:mcp_oban_fastest_tasks, [:expires_at], prefix: prefix)
+  end
+
+  defp change(3, :down, prefix) do
+    drop_if_exists table(:mcp_oban_fastest_tasks, prefix: prefix)
   end
 
   defp record_version(prefix, version) do

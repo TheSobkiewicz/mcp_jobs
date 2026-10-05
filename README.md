@@ -35,6 +35,16 @@ mix mcp_oban.install
 
 It creates a migration for the `mcp_oban_tasks` table and, with `ex_mcp`, an MCP server module. Then it prints the next steps. Options: `--repo MyApp.Repo`, `--server MyApp.MCPServer`, `--no-server`, and `--prefix private`.
 
+In a Phoenix app, add `--phoenix`. The installer then also adds the MCP server to the router:
+
+```elixir
+scope "/mcp" do
+  forward "/", ExMCP.HttpPlug, handler: MyApp.MCPServer, protocol_mode: :prefer_modern
+end
+```
+
+It looks for `lib/my_app_web/router.ex`; `--router path/to/router.ex` sets another file. Put your auth plugs in front of the route, so that only allowed clients can call the tools.
+
 ### Manual setup
 
 MCPOban uses the repo of your Oban instance. Add a migration:
@@ -58,12 +68,12 @@ The `mcp_oban_tasks` table has a version, stored as a comment on the table. When
 defmodule MyApp.Repo.Migrations.UpgradeMCPObanTasks do
   use Ecto.Migration
 
-  def up, do: MCPOban.Migration.up(version: 2)
+  def up, do: MCPOban.Migration.up(version: 3)
   def down, do: MCPOban.Migration.down(version: 2)
 end
 ```
 
-Version 2 added the `progress` column. `MCPOban.Migration.migrated_version/1` returns the version of your database.
+Version 2 added the `progress` column, and version 3 the `mcp_oban_fastest_tasks` table for durable FastestMCP tasks. `MCPOban.Migration.migrated_version/1` returns the version of your database.
 
 If your Oban instance does not have the name `Oban`, set the name:
 
@@ -269,7 +279,17 @@ When a client cancels a FastestMCP task (`tasks/cancel`), FastestMCP stops the w
 
 Options of `add_tools/3`: `:oban`, `:job`, `:kill`, `:wait_timeout`, `:interval` (the time between two status checks: 1000 ms for tasks, 100 ms without tasks), and `:task` (the FastestMCP task option, default `[mode: :optional]`).
 
-Limit: FastestMCP keeps its tasks in memory by default. After a restart, clients cannot read FastestMCP tasks from before the restart, even though the Oban job and the MCPOban task still exist.
+### Durable FastestMCP tasks
+
+FastestMCP keeps its tasks in memory by default, so a restart loses them. Use the MCPOban task backend to keep them in PostgreSQL:
+
+```elixir
+FastestMCP.start_server(server, task_backend: {MCPOban.FastestMCP.TaskBackend, oban: Oban})
+```
+
+After a restart, FastestMCP marks unfinished tasks as failed. For a task of an MCPOban tool, the Oban job is not gone, so the backend keeps the task working and shows the state of the MCPOban task: its progress while it works, then its result, its error, or `cancelled`. A client can also cancel such a task, and MCPOban then cancels the job. Options: `:oban`, and `:kill` (a cancel after a restart also kills a running job).
+
+The backend needs `MCPOban.Migration` version 3.
 
 ## Use without an MCP library
 

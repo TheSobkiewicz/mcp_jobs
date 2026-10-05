@@ -418,6 +418,10 @@ defmodule MCPOban do
     :ok
   end
 
+  @doc false
+  @spec __config__(keyword()) :: Oban.Config.t()
+  def __config__(opts), do: config(opts)
+
   defp config(opts) do
     opts
     |> Keyword.get_lazy(:oban, fn -> Application.get_env(:mcp_oban, :oban, Oban) end)

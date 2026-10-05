@@ -10,8 +10,10 @@ defmodule Mix.Tasks.McpOban.Install do
 
     * a migration for the `mcp_oban_tasks` table, in the migrations folder of the repo
     * an MCP server module, `lib/my_app/mcp_server.ex`, when `ex_mcp` is a dependency
+    * with `--phoenix`, the `/mcp` route in the Phoenix router
 
-  It does not change existing files. It asks before it replaces a file.
+  It changes no existing file, except the router with `--phoenix`. It asks
+  before it replaces a file.
 
   ## Options
 
@@ -21,13 +23,23 @@ defmodule Mix.Tasks.McpOban.Install do
       `MyApp.MCPServer`.
     * `--no-server`: do not create the MCP server module.
     * `--prefix`: the database prefix of the Oban tables.
+    * `--phoenix`: add the MCP server to the Phoenix router at `/mcp`.
+    * `--router`: the path of the Phoenix router. The default is
+      `lib/my_app_web/router.ex`.
   """
 
   use Mix.Task
 
   import Mix.Generator
 
-  @switches [repo: :string, server: :string, prefix: :string, no_server: :boolean]
+  @switches [
+    repo: :string,
+    server: :string,
+    prefix: :string,
+    no_server: :boolean,
+    phoenix: :boolean,
+    router: :string
+  ]
   @aliases [r: :repo]
 
   @impl Mix.Task
@@ -47,7 +59,62 @@ defmodule Mix.Tasks.McpOban.Install do
 
     if create_server?, do: create_server(server)
 
-    Mix.shell().info(next_steps(app, server, create_server?))
+    route_added? = Keyword.get(opts, :phoenix, false) and add_route(app, server, opts)
+
+    Mix.shell().info(next_steps(app, server, create_server?, route_added?))
+  end
+
+  defp add_route(app, server, opts) do
+    router = Keyword.get(opts, :router, Path.join(["lib", "#{app}_web", "router.ex"]))
+
+    cond do
+      not Code.ensure_loaded?(ExMCP) ->
+        Mix.shell().error(
+          "--phoenix needs {:ex_mcp, \"~> 1.5\"} in your deps. No route was added."
+        )
+
+        false
+
+      not File.exists?(router) ->
+        Mix.raise("No Phoenix router at #{router}. Pass --router path/to/router.ex")
+
+      File.read!(router) =~ "ExMCP.HttpPlug" ->
+        Mix.shell().info([
+          :yellow,
+          "* skipping ",
+          :reset,
+          router,
+          " (it already routes to ExMCP)"
+        ])
+
+        true
+
+      true ->
+        insert_route(router, server)
+        true
+    end
+  end
+
+  # Adds the scope before the last `end`, which closes the router module.
+  defp insert_route(router, server) do
+    source = router |> File.read!() |> String.trim_trailing()
+
+    if not String.ends_with?(source, "end") do
+      Mix.raise("Cannot find the end of the router module in #{router}")
+    end
+
+    route = """
+
+      scope "/mcp" do
+        forward "/", ExMCP.HttpPlug, handler: #{server}, protocol_mode: :prefer_modern
+      end
+    end
+    """
+
+    body = source |> String.replace_suffix("end", "") |> String.trim_trailing()
+    File.write!(router, body <> "\n" <> route)
+
+    Mix.shell().info([:green, "* updating ", :reset, router])
   end
 
   defp repo(app, opts) do
@@ -94,27 +161,39 @@ defmodule Mix.Tasks.McpOban.Install do
     create_file(file, server_template(module: server))
   end
 
-  defp next_steps(app, server, server_created?) do
+  defp next_steps(app, server, server_created?, route_added?) do
     server_steps =
-      if server_created? do
-        """
+      cond do
+        route_added? ->
+          """
 
-        3. Add your workers to `tools:` in #{server}.
+          3. Add your workers to `tools:` in #{server}.
 
-        4. Serve the MCP server. In a Phoenix router:
+          4. The MCP server is at /mcp in your Phoenix app. Put your auth plugs in
+             front of it (a pipeline in the "/mcp" scope), so that only allowed
+             clients can call the tools.
+          """
 
-               forward "/mcp", ExMCP.HttpPlug, handler: #{server}, protocol_mode: :prefer_modern
+        server_created? ->
+          """
 
-           Or start it alone:
+          3. Add your workers to `tools:` in #{server}.
 
-               Plug.Cowboy.http(ExMCP.HttpPlug, [handler: #{server}, protocol_mode: :prefer_modern], port: 4000)
-        """
-      else
-        """
+          4. Serve the MCP server. In a Phoenix router (or run with --phoenix):
 
-        3. Add {:ex_mcp, "~> 1.5"} to your deps and run `mix mcp_oban.install` again
-           for an MCP server module. Or use MCPOban.enqueue/3 with your own MCP server.
-        """
+                 forward "/mcp", ExMCP.HttpPlug, handler: #{server}, protocol_mode: :prefer_modern
+
+             Or start it alone:
+
+                 Plug.Cowboy.http(ExMCP.HttpPlug, [handler: #{server}, protocol_mode: :prefer_modern], port: 4000)
+          """
+
+        true ->
+          """
+
+          3. Add {:ex_mcp, "~> 1.5"} to your deps and run `mix mcp_oban.install` again
+             for an MCP server module. Or use MCPOban.enqueue/3 with your own MCP server.
+          """
       end
 
     """
