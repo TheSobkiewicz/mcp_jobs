@@ -19,7 +19,8 @@ defmodule MCPO.Telemetry do
   MCPO attaches to `[:oban, :job, :stop]` and `[:oban, :job, :exception]` when
   its application starts. It changes a task only when Oban reports a final state
   (`:success`, `:discard` or `:cancelled`). A `:failure` state is a retry, so the
-  task stays `:working`.
+  task stays `:working`. When a `:failure` or `:snoozed` job belongs to a task that
+  is already cancelled, MCPO cancels the job, so it does not run again.
 
   On `:success`, the return value of `perform/1` becomes the task result:
   `{:ok, map}` saves the map, `{:ok, value}` saves `%{"value" => value}`, and
@@ -56,6 +57,27 @@ defmodule MCPO.Telemetry do
       :success -> complete(conf, task_id, result(meta))
       :discard -> MCPO.transition(conf, task_id, :failed, error: error(meta))
       :cancelled -> MCPO.transition(conf, task_id, :cancelled, [])
+    end
+  rescue
+    exception ->
+      Logger.error("[MCPO] telemetry handler failed: " <> Exception.message(exception))
+  end
+
+  # A task that was cancelled while its job ran must not run again on a retry.
+  def handle_event(
+        [:oban, :job, _event],
+        _measurements,
+        %{
+          job: %Oban.Job{id: job_id, meta: %{"mcp_task_id" => task_id}},
+          state: state,
+          conf: %Oban.Config{name: name} = conf
+        },
+        _config
+      )
+      when state in [:failure, :snoozed] do
+    case MCPO.Repository.get(conf, task_id) do
+      %Task{status: :cancelled} -> Oban.cancel_job(name, job_id)
+      _working_or_missing -> :ok
     end
   rescue
     exception ->

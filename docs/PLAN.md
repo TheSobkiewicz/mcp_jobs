@@ -134,3 +134,10 @@ The consensus-review skill (two runs, same results) found problems in the first 
 - Tests for the fallback branches: kill on timeout, a task that finished before the cancel, the conflict message.
 
 Still open (one reviewer each, confirmed by research): ExMCP adds `_request_id`/`_meta` to tool arguments, which also stops Oban `unique:` from finding duplicate calls; `enqueue/3` returns another owner's task for an existing `task_id`; a cancelled task's running job can retry; a non-list `"content"` result is passed on unchanged.
+
+## Open findings fixed (2026-10-05)
+
+- The ExMCP adapter removes `_request_id` and `_meta` from tool arguments before the check and the job. Job args are now the tool arguments only, and Oban `unique:` finds duplicate calls.
+- `enqueue/3` returns `{:error, :already_exists}` for an existing `task_id` with another owner or worker.
+- When a job attempt fails or snoozes and its task is cancelled, the telemetry handler cancels the job.
+- A result is passed on as a tool result only when `"content"` is a list.

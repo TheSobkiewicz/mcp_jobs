@@ -142,8 +142,9 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @doc false
     def call_tool_result(%Task{status: :completed, result: nil}), do: %{"content" => []}
 
-    def call_tool_result(%Task{status: :completed, result: %{"content" => _} = result}),
-      do: result
+    def call_tool_result(%Task{status: :completed, result: %{"content" => content} = result})
+        when is_list(content),
+        do: result
 
     def call_tool_result(%Task{status: :completed, result: result}) do
       %{

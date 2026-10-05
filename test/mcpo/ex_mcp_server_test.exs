@@ -27,6 +27,8 @@ defmodule MCPO.ExMCPServerTest do
       ExMCP.Client.call_tool(client, "generate_report", %{"value" => 5}, format: :map)
 
     assert {:ok, %{"status" => "working"}} = ExMCP.Client.get_task(client, task_id)
+    assert %Oban.Job{args: %{"value" => 5} = args} = Repo.one(Oban.Job)
+    assert map_size(args) == 1
 
     drain()
 

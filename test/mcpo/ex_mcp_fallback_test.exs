@@ -53,7 +53,19 @@ defmodule MCPO.ExMCPFallbackTest do
       stop_jobs.()
       refute Map.has_key?(result, "taskId")
       assert %Task{status: :completed} = Repo.one(Task)
+      assert %Oban.Job{args: %{"value" => 4} = args} = Repo.one(Oban.Job)
+      assert map_size(args) == 1
     end
+  end
+
+  test "a duplicate call through ExMCP finds the unique job" do
+    {:ok, _task} = MCPO.enqueue(MCPO.Test.UniqueWorker, %{"q" => 1})
+    client = start_client(:prefer_modern, %{})
+
+    assert {:ok, %{"isError" => true, "content" => [%{"text" => text}]}} =
+             ExMCP.Client.call_tool(client, "unique_report", %{"q" => 1}, format: :map)
+
+    assert text == "A job with the same arguments already exists."
   end
 
   test "a failed job returns an error result" do

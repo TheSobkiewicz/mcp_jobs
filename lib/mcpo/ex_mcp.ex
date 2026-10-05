@@ -180,6 +180,8 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @spec __call_tool__([map()], String.t(), map(), term(), keyword()) ::
             {:ok, map(), term()} | {:error, term(), term()}
     def __call_tool__(specs, name, arguments, state, opts) do
+      arguments = tool_arguments(arguments)
+
       case Enum.find(specs, &match?(%{name: ^name}, &1)) do
         %{worker: worker, input_schema: schema} ->
           case SchemaValidator.validate_schema(arguments, schema) do
@@ -266,12 +268,18 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @spec create_task(String.t(), module(), map(), term(), keyword()) ::
             {:ok, map(), term()} | {:error, term(), term()}
     def create_task(tool_name, worker, arguments, state, opts) do
+      arguments = tool_arguments(arguments)
+
       if tasks_declared?() do
         ExMCP.Tasks.Server.create(tool_name, arguments, state, [{:worker, worker} | opts])
       else
         {:ok, run_and_wait(tool_name, worker, arguments, opts), state}
       end
     end
+
+    # ExMCP adds the request id and the request _meta to the tool arguments.
+    # They are not tool arguments and must not become job args.
+    defp tool_arguments(arguments), do: Map.drop(arguments, ["_request_id", "_meta"])
 
     defp tasks_declared? do
       case ExMCP.Server.Context.current() do

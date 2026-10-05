@@ -200,7 +200,7 @@ Also define `handle_list_tools/2` and add your tool to the list from `super`. `c
 
 ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPO table:
 
-- A completed task returns its result as a tool call result. The result map is in `structuredContent`, and as JSON text in `content`. If your result already has a `"content"` key, it is sent without change.
+- A completed task returns its result as a tool call result. The result map is in `structuredContent`, and as JSON text in `content`. If your result already has a `"content"` list of content blocks, it is sent without change.
 - A failed task returns a JSON-RPC error.
 - Each task is bound to the ExMCP owner (principal, tenant, and audience). Other owners cannot read or cancel it.
 
@@ -248,7 +248,7 @@ To make an adapter for a different MCP server, use `MCPO.enqueue/3`, `MCPO.get/2
 
 ### Duplicate requests
 
-Give the MCP task ID as `task_id:`. If a task with this ID already exists, `enqueue/3` returns it and does not insert a second job. A unique index in the database enforces this, also for requests that arrive at the same time.
+Give the MCP task ID as `task_id:`. If a task with this ID already exists for the same worker and owner, `enqueue/3` returns it and does not insert a second job. If the worker or the owner is different, it returns `{:error, :already_exists}`, so one owner never gets another owner's task. A unique index in the database enforces this, also for requests that arrive at the same time.
 
 ## Cancellation
 
@@ -270,7 +270,7 @@ Give the MCP task ID as `task_id:`. If a task with this ID already exists, `enqu
   end
   ```
 
-  If the worker does not stop, it runs to the end, but its result is not saved. The task stays `cancelled`.
+  If the worker does not stop, it runs to the end, but its result is not saved. The task stays `cancelled`. If the attempt fails or snoozes, MCPO cancels the job, so Oban does not run it again.
 
 - **Kill the job:** `MCPO.cancel(task_id, kill: true)` makes Oban kill a running job. The process stops at once and cannot clean up.
 

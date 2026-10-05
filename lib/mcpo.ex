@@ -57,8 +57,9 @@ defmodule MCPO do
   ## Options
 
     * `:task_id`: the MCP task ID. A random ID is made when it is not given.
-      When a task with this ID already exists, it is returned and no new job is
-      inserted.
+      When a task with this ID already exists for the same worker and owner,
+      it is returned and no new job is inserted. When the worker or the owner
+      is different, `{:error, :already_exists}` is returned.
     * `:owner`: a map with the auth context of the task (for example a user ID).
     * `:meta`: a map of extra data for the MCP server adapter.
     * `:job`: options for `c:Oban.Worker.new/2`, such as `:queue` or `:scheduled_at`.
@@ -68,11 +69,13 @@ defmodule MCPO do
   def enqueue(worker, args, opts \\ []) when is_atom(worker) and is_map(args) do
     conf = config(opts)
     task_id = Keyword.get_lazy(opts, :task_id, &generate_task_id/0)
+    worker_name = inspect(worker)
+    owner = Keyword.get(opts, :owner)
 
     attrs = %{
       task_id: task_id,
-      worker: inspect(worker),
-      owner: opts[:owner],
+      worker: worker_name,
+      owner: owner,
       meta: Keyword.get(opts, :meta, %{})
     }
 
@@ -89,13 +92,25 @@ defmodule MCPO do
         Telemetry.emit(task)
         {:ok, task}
 
-      {:ok, {:existing, task}} ->
-        {:ok, task}
+      {:ok, {:existing, %Task{owner: stored_owner, worker: ^worker_name} = task}} ->
+        if same_owner?(stored_owner, owner), do: {:ok, task}, else: {:error, :already_exists}
+
+      {:ok, {:existing, %Task{}}} ->
+        {:error, :already_exists}
 
       {:error, reason} ->
         {:error, reason}
     end
   end
+
+  defp same_owner?(stored, requested), do: stored == json_keys(requested)
+
+  # The owner is stored as JSON, so atom keys come back as strings.
+  defp json_keys(map) when is_map(map),
+    do: Map.new(map, fn {k, v} -> {to_string(k), json_keys(v)} end)
+
+  defp json_keys(list) when is_list(list), do: Enum.map(list, &json_keys/1)
+  defp json_keys(value), do: value
 
   @doc """
   Returns the status of a task.

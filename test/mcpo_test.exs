@@ -353,6 +353,55 @@ defmodule MCPOTest do
     end
   end
 
+  describe "open findings" do
+    test "an existing task_id with another owner or worker is not returned" do
+      {:ok, %Task{id: id}} =
+        MCPO.enqueue(SuccessWorker, %{value: 1}, task_id: "1", owner: %{user: 1})
+
+      assert {:error, :already_exists} =
+               MCPO.enqueue(SuccessWorker, %{value: 1}, task_id: "1", owner: %{user: 2})
+
+      assert {:error, :already_exists} =
+               MCPO.enqueue(PlainWorker, %{}, task_id: "1", owner: %{user: 1})
+
+      assert {:ok, %Task{id: ^id}} =
+               MCPO.enqueue(SuccessWorker, %{value: 1}, task_id: "1", owner: %{"user" => 1})
+
+      assert Repo.aggregate(Oban.Job, :count) == 1
+    end
+
+    test "a failed attempt of a cancelled task does not run again" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPO.enqueue(FlakyWorker, %{succeed_on: 3})
+
+      Repo.update_all(where(Oban.Job, id: ^job_id), set: [state: "executing"])
+      {:ok, _task} = MCPO.cancel(task_id)
+      Repo.update_all(where(Oban.Job, id: ^job_id), set: [state: "available"])
+
+      assert %{failure: 1} = Oban.drain_queue(queue: :default)
+      assert %Oban.Job{state: "cancelled", attempt: 1} = Repo.get(Oban.Job, job_id)
+
+      assert %{success: 0, failure: 0} =
+               Oban.drain_queue(queue: :default, with_scheduled: true, with_recursion: true)
+
+      assert {:ok, %{status: :cancelled}} = MCPO.status(task_id)
+    end
+
+    test "a result with a content key that is not a list is wrapped" do
+      task = %Task{status: :completed, result: %{"content" => "report text"}}
+
+      assert %{
+               "content" => [%{"type" => "text", "text" => ~s({"content":"report text"})}],
+               "structuredContent" => %{"content" => "report text"}
+             } = MCPO.ExMCP.Store.call_tool_result(task)
+
+      blocks = %{"content" => [%{"type" => "text", "text" => "hi"}]}
+
+      assert ^blocks =
+               MCPO.ExMCP.Store.call_tool_result(%Task{status: :completed, result: blocks})
+    end
+  end
+
   describe "races" do
     test "a cancel after completion does nothing" do
       {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})
