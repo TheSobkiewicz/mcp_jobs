@@ -70,7 +70,7 @@ defmodule MCPObanTest do
       assert {:ok, %{status: :completed, result: %{"value" => 42}}} = MCPOban.status(task_id)
 
       assert_received {:telemetry, [:mcp_oban, :task, :started], %{system_time: _},
-                       %{task_id: ^task_id, worker: "MCPOban.Test.SuccessWorker"}}
+                       %{task_id: ^task_id, worker: "MCPOban.Test.SuccessWorker", oban: Oban}}
 
       assert_received {:telemetry, [:mcp_oban, :task, :completed], %{duration: duration},
                        %{task_id: ^task_id, oban_job_id: job_id}}
@@ -539,7 +539,21 @@ defmodule MCPObanTest do
       assert map_size(progress) == 1
     end
 
+    test "sends a progress event" do
+      attach_telemetry()
+
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
+
+      :ok = MCPOban.progress(running_job(job_id), 1, 2)
+
+      assert_received {:telemetry, [:mcp_oban, :task, :progress], %{system_time: _},
+                       %{task_id: ^task_id, oban: Oban}}
+    end
+
     test "does not change a finished task" do
+      attach_telemetry()
+
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
         MCPOban.enqueue(SuccessWorker, %{value: 1})
 
@@ -547,6 +561,7 @@ defmodule MCPObanTest do
 
       assert :ok = MCPOban.progress(running_job(job_id), 9, 9)
       assert %Task{status: :completed, progress: nil} = Repo.get_by(Task, task_id: task_id)
+      refute_received {:telemetry, [:mcp_oban, :task, :progress], _measurements, _metadata}
     end
 
     test "ignores a job without a task and rejects wrong values" do

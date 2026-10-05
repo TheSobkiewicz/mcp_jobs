@@ -180,7 +180,7 @@ Ordered by value. Status in brackets.
 5. Oban tools for AI agents: list queues, failed jobs and errors, retry or cancel.
 6. Durable FastestMCP tasks: a FastestMCP TaskBackend on `mcp_oban_fastest_tasks`. [done]
 7. `mix mcp_oban.install --phoenix` adds the `forward "/mcp"` route. [done]
-8. Push notifications (`notifications/tasks`) on task changes.
+8. Push notifications (`notifications/tasks`) on task changes. [done]
 
 Also open: Hex package metadata and license (publishing postponed); release-review single findings (ExMCP fallback ignores `notifications/cancelled`; `"content"` lists not checked for block shape; no tests for an Oban prefix, real queues, the snooze branch). The migration version finding is fixed.
 
@@ -194,3 +194,11 @@ Found on the way: an existing database did not get the new column, because the m
 
 - `MCPOban.FastestMCP.TaskBackend` implements `FastestMCP.TaskBackend` on `mcp_oban_fastest_tasks` (migration version 3; task data in Erlang term format). On startup FastestMCP marks running tasks as failed ("runtime restarted"); for tasks of MCPOban tools the backend keeps them working, and on read it shows the MCPOban state (progress, result via `FastestMCP.ResultNormalizer.normalize_tool/1`, error, cancelled). A cancel after a restart cancels the job through the backend. A test compares the rebuilt result with a real FastestMCP result.
 - `mix mcp_oban.install --phoenix` adds `scope "/mcp" do forward "/", ExMCP.HttpPlug, ... end` before the end of the router. Checked in a minimal Phoenix 1.8 app with Plug.Parsers (ExMCP accepts an already parsed body) and the MCP Inspector.
+
+## Task notifications (2026-10-05)
+
+- New telemetry event `[:mcp_oban, :task, :progress]`, sent when `MCPOban.progress/4` changes a working task. All task events have `:oban` (the Oban instance name) in the metadata.
+- `MCPOban.ExMCP.Notifications` (attached by `MCPOban.Application` when ExMCP is loaded) listens to the completed, failed, cancelled and progress events. For tasks that `MCPOban.ExMCP.Store` created (meta `"ex_mcp" => true`), it publishes `notifications/tasks` with `ExMCP.Server.Subscriptions.publish_async/3`. ExMCP authorizes the `"taskIds"` filter with `Store.fetch/3` when a client listens, so only the task owner gets the notifications.
+- ExMCP already notifies for its own changes (create, `tasks/cancel`). A cancel through ExMCP can send two notifications with the same state; the listener queue coalesces them.
+- The default registry is node-local. Registry option: `config :mcp_oban, ex_mcp_subscription_registry:`.
+- FastestMCP sends its own task notifications. Not covered: tasks that the durable backend kept after a restart have no tool process, so they get no notifications.

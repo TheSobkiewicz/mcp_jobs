@@ -49,8 +49,9 @@ The plan and its decisions are in `docs/PLAN.md`.
 - `MCPOban`: public API (`enqueue/3`, `status/2`, `get/2`, `await/2`, `cancel/2`, `cancelled?/1`, `progress/4`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
 - `MCPOban.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
 - Workers are plain `Oban.Worker` modules. `MCPOban.Telemetry` saves the `perform/1` return value as the task result. `use MCPOban.Tool` in a worker is optional: it keeps `@moduledoc` and the tool options in `__mcp_oban_tool__/0` at compile time, because `Code.fetch_docs/1` does not work during compilation and releases strip docs.
-- `MCPOban.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcp_oban, :task, ...]` events.
-- `MCPOban.Application`: attaches the telemetry handler. It starts no processes.
+- `MCPOban.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcp_oban, :task, ...]` events, including `:progress`. The metadata has `:oban`, the Oban instance name.
+- `MCPOban.Application`: attaches the telemetry handlers. It starts no processes.
+- `MCPOban.ExMCP.Notifications`: a telemetry handler that publishes `notifications/tasks` for tasks of `MCPOban.ExMCP.Store` (meta `"ex_mcp" => true`) to ExMCP listeners.
 - `MCPOban.ExMCP` and `MCPOban.ExMCP.Store`: the ExMCP adapter. `use MCPOban.ExMCP, tools: [Worker, ...]` generates the handler callbacks. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
 - `MCPOban.FastestMCP`: the FastestMCP adapter (`add_tools/3`). Each tool inserts a job and waits for it; FastestMCP owns the MCP task. A watcher process cancels the MCPOban task when FastestMCP kills the waiting tool. Also optional and inside `if Code.ensure_loaded?(...)`.
 - `MCPOban.FastestMCP.TaskBackend`: a FastestMCP `TaskBackend` on the `mcp_oban_fastest_tasks` table (migration version 3). After a restart it keeps tasks of MCPOban tools working and shows the MCPOban task state, using `FastestMCP.ResultNormalizer.normalize_tool/1` for results.

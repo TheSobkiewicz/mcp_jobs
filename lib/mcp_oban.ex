@@ -98,7 +98,7 @@ defmodule MCPOban do
 
     case result do
       {:ok, {:inserted, task}} ->
-        Telemetry.emit(task)
+        Telemetry.emit(conf, task)
         {:ok, task}
 
       {:ok, {:existing, %Task{owner: stored_owner, worker: ^worker_name} = task}} ->
@@ -252,7 +252,10 @@ defmodule MCPOban do
       %{"current" => current, "total" => total, "message" => message}
       |> Map.reject(fn {_key, value} -> is_nil(value) end)
 
-    Repository.put_progress(conf, task_id, progress)
+    case Repository.put_progress(conf, task_id, progress) do
+      {:ok, task} -> Telemetry.emit_progress(conf, task)
+      :noop -> :ok
+    end
   end
 
   def progress(%Oban.Job{meta: meta}, _current, _total, _message)
@@ -279,7 +282,7 @@ defmodule MCPOban do
   def transition(conf, task_id, status, changes) do
     case Repository.transition(conf, task_id, status, changes) do
       {:ok, task} ->
-        Telemetry.emit(task)
+        Telemetry.emit(conf, task)
         {:ok, task}
 
       :noop ->

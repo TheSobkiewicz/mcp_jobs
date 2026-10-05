@@ -90,7 +90,8 @@ defmodule MCPOban.DataCase do
     handler_id = "test-#{inspect(make_ref())}"
 
     events =
-      for event <- [:started, :completed, :failed, :cancelled], do: [:mcp_oban, :task, event]
+      for event <- [:started, :completed, :failed, :cancelled, :progress],
+          do: [:mcp_oban, :task, event]
 
     :telemetry.attach_many(
       handler_id,

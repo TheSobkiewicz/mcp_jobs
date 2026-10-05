@@ -8,11 +8,14 @@ defmodule MCPOban.Telemetry do
     * `[:mcp_oban, :task, :completed]`
     * `[:mcp_oban, :task, :failed]`
     * `[:mcp_oban, :task, :cancelled]`
+    * `[:mcp_oban, :task, :progress]`: a working task got new progress
+      (`MCPOban.progress/4`).
 
-  Measurements: `:system_time` for `:started`. `:duration` for the other events,
-  in native time units, from task insert to the status change.
+  Measurements: `:system_time` for `:started` and `:progress`. `:duration` for
+  the other events, in native time units, from task insert to the status change.
 
-  Metadata: `:task_id`, `:oban_job_id`, `:worker`.
+  Metadata: `:task_id`, `:oban_job_id`, `:worker`, and `:oban` (the name of the
+  Oban instance).
 
   ## Oban events
 
@@ -88,26 +91,40 @@ defmodule MCPOban.Telemetry do
   def handle_event(_event, _measurements, _meta, _config), do: :ok
 
   @doc false
-  @spec emit(Task.t()) :: :ok
-  def emit(%Task{status: :working} = task) do
+  @spec emit(Oban.Config.t(), Task.t()) :: :ok
+  def emit(conf, %Task{status: :working} = task) do
     :telemetry.execute(
       [:mcp_oban, :task, :started],
       %{system_time: System.system_time()},
-      metadata(task)
+      metadata(conf, task)
     )
   end
 
-  def emit(%Task{status: status, inserted_at: inserted_at, updated_at: updated_at} = task) do
+  def emit(conf, %Task{status: status, inserted_at: inserted_at, updated_at: updated_at} = task) do
     duration =
       updated_at
       |> DateTime.diff(inserted_at, :microsecond)
       |> System.convert_time_unit(:microsecond, :native)
 
-    :telemetry.execute([:mcp_oban, :task, status], %{duration: duration}, metadata(task))
+    :telemetry.execute([:mcp_oban, :task, status], %{duration: duration}, metadata(conf, task))
   end
 
-  defp metadata(%Task{task_id: task_id, oban_job_id: job_id, worker: worker}) do
-    %{task_id: task_id, oban_job_id: job_id, worker: worker}
+  @doc false
+  @spec emit_progress(Oban.Config.t(), Task.t()) :: :ok
+  def emit_progress(conf, %Task{} = task) do
+    :telemetry.execute(
+      [:mcp_oban, :task, :progress],
+      %{system_time: System.system_time()},
+      metadata(conf, task)
+    )
+  end
+
+  defp metadata(%Oban.Config{name: name}, %Task{
+         task_id: task_id,
+         oban_job_id: job_id,
+         worker: worker
+       }) do
+    %{task_id: task_id, oban_job_id: job_id, worker: worker, oban: name}
   end
 
   defp complete(conf, task_id, result) do

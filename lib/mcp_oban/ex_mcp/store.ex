@@ -29,7 +29,12 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       enqueue_opts = [
         task_id: task_id,
         owner: normalize_owner(owner),
-        meta: %{"tool_name" => tool_name, "ttl" => ttl, "poll_interval" => poll_interval},
+        meta: %{
+          "ex_mcp" => true,
+          "tool_name" => tool_name,
+          "ttl" => ttl,
+          "poll_interval" => poll_interval
+        },
         job: Keyword.get(opts, :job, [])
       ]
 
@@ -115,16 +120,17 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
 
     defp oban_opts(opts), do: Keyword.take(opts, [:oban])
 
-    defp to_mcp_task(
-           %Task{
-             task_id: task_id,
-             status: status,
-             meta: meta,
-             progress: progress,
-             inserted_at: inserted_at,
-             updated_at: updated_at
-           } = task
-         ) do
+    @doc false
+    def to_mcp_task(
+          %Task{
+            task_id: task_id,
+            status: status,
+            meta: meta,
+            progress: progress,
+            inserted_at: inserted_at,
+            updated_at: updated_at
+          } = task
+        ) do
       %MCPTask{
         id: task_id,
         state: status,

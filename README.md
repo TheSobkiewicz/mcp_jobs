@@ -252,7 +252,12 @@ Listed tools have `"execution" => %{"taskSupport" => "optional"}`, so both kinds
 
 - MCPOban supports the MCP Tasks extension (spec 2026-07-28). Older clients get the direct result described above, not a task.
 - The `input_required` status is not supported.
-- MCPOban does not send `notifications/tasks`, so clients must poll with `tasks/get`.
+
+### Task notifications
+
+A client can listen for task changes (`subscriptions/listen` with a `"taskIds"` filter) instead of polling with `tasks/get`. MCPOban then sends `notifications/tasks` when the job completes or fails, when the task is cancelled, and when the worker reports progress.
+
+ExMCP keeps listeners on the local node. In a cluster, a client gets notifications only for jobs that finish on the node of its connection, unless you configure an ExMCP subscription adapter for the cluster. If you start your own `ExMCP.Server.Subscriptions` registry, set `config :mcp_oban, ex_mcp_subscription_registry: MyApp.Registry`.
 
 ## Use with FastestMCP
 
@@ -330,7 +335,7 @@ end
 `MCPOban.progress(job, current, total \\ nil, message \\ nil)` saves the progress while the task is `working`. `current` should grow. Clients see it:
 
 - With ExMCP, `tasks/get` shows it as `statusMessage`, for example `"Wrote section 2 (2/5)"`. A client without tasks gets progress notifications when it sent a progress token.
-- With FastestMCP, it becomes the progress of the FastestMCP task, and FastestMCP sends it to the client.
+- With FastestMCP, it becomes the progress of the FastestMCP task, and FastestMCP sends it to the client. FastestMCP also sends its own task notifications. A task that a durable backend kept after a restart has no tool process, so its listeners get no notifications; `tasks/get` still shows its state.
 - `MCPOban.status/2` returns it as `%{status: :working, progress: %{"current" => 2, "total" => 5, "message" => "..."}}`.
 
 The adapters check for new progress at their `:interval`.
@@ -391,8 +396,9 @@ MCPOban sends these events:
 | `[:mcp_oban, :task, :completed]` | `:duration`    |
 | `[:mcp_oban, :task, :failed]`    | `:duration`    |
 | `[:mcp_oban, :task, :cancelled]` | `:duration`    |
+| `[:mcp_oban, :task, :progress]`  | `:system_time` |
 
-`:duration` is the time from the task start to the status change, in native time units. The metadata of all events is `:task_id`, `:oban_job_id`, and `:worker`.
+`:duration` is the time from the task start to the status change, in native time units. `:progress` is sent when a working task gets new progress. The metadata of all events is `:task_id`, `:oban_job_id`, `:worker`, and `:oban` (the Oban instance name).
 
 For retries, attempts, and queue times, use the Oban telemetry events.
 

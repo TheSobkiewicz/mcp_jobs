@@ -32,12 +32,14 @@ defmodule MCPOban.Repository do
     task
   end
 
-  @spec put_progress(Config.t(), String.t(), map()) :: :ok
+  @spec put_progress(Config.t(), String.t(), map()) :: {:ok, Task.t()} | :noop
   def put_progress(%Config{} = conf, task_id, progress) do
-    query = from(t in Task, where: t.task_id == ^task_id and t.status == ^:working)
-    Repo.update_all(conf, query, set: [progress: progress, updated_at: DateTime.utc_now()])
+    query = from(t in Task, where: t.task_id == ^task_id and t.status == ^:working, select: t)
 
-    :ok
+    case Repo.update_all(conf, query, set: [progress: progress, updated_at: DateTime.utc_now()]) do
+      {1, [task]} -> {:ok, task}
+      {0, []} -> :noop
+    end
   end
 
   @doc """
