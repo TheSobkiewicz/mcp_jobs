@@ -1,4 +1,4 @@
-defmodule ReportServer.Repo.Migrations.AddObanAndMCPJobs do
+defmodule DeepThought.Repo.Migrations.AddObanAndMCPJobs do
   use Ecto.Migration
 
   def up do

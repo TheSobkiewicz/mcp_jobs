@@ -90,6 +90,11 @@ defmodule MCPJobs.ExMCPToolsTest do
              MCPJobs.ExMCP.__initialize__(%{"protocolVersion" => "1999-01-01"}, %{})
   end
 
+  test "server_info/0 returns the server name" do
+    assert %{"name" => "MCPJobs.Test.MCPServer", "version" => "1.0.0"} =
+             MCPJobs.Test.MCPServer.server_info()
+  end
+
   test "rejects duplicate tool names and modules that are not workers" do
     assert_raise ArgumentError, ~r/duplicate MCPJobs tool names/, fn ->
       MCPJobs.ExMCP.__tools__([SuccessWorker, {PlainWorker, name: "success_worker"}])

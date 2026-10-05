@@ -16,7 +16,13 @@ The tool name, description and input schema follow the same rules as with ExMCP.
 Each tool call inserts an Oban job and waits for it. FastestMCP decides how the client gets the result:
 
 - A client with MCP Tasks gets a task at once. FastestMCP supports both task versions, `2025-11-25` and the `2026-07-28` extension, so clients with the current TypeScript SDK also get real tasks.
-- A client without tasks waits for the result. If the job does not finish in `:wait_timeout` (9 seconds by default), MCPJobs cancels it and returns an error result.
+- A client without tasks waits for the result. If the job does not finish in `:wait_timeout` (9 seconds by default), MCPJobs cancels it and returns an error result. Over HTTP, FastestMCP stops a request after `stream_request_timeout_ms` (60 seconds by default). For a longer wait, raise both:
+
+  ```elixir
+  MCPJobs.FastestMCP.add_tools(server, tools, wait_timeout: 300_000)
+
+  FastestMCP.streamable_http_child_spec("reports", port: 4001, stream_request_timeout_ms: 305_000)
+  ```
 - A failed or cancelled job returns a tool result with `isError: true`.
 
 When a client cancels a FastestMCP task (`tasks/cancel`), FastestMCP stops the waiting tool process. MCPJobs then cancels the MCPJobs task and its job. When the tool process stops for another reason (the server stops, the client disconnects, or the wait fails), the job keeps running and the MCPJobs task finishes as usual.

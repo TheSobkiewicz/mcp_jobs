@@ -44,7 +44,10 @@ if Code.ensure_loaded?(FastestMCP) do
       * `:job`: options for `c:Oban.Worker.new/2`.
       * `:kill`: when `true`, a cancel also kills a running job.
       * `:wait_timeout`: for clients without tasks, the maximum wait in
-        milliseconds. The default is 9000.
+        milliseconds. The default is 9000. Over HTTP, FastestMCP stops a
+        request after `stream_request_timeout_ms` (60 seconds by default), so
+        for a longer wait also raise this option of
+        `FastestMCP.streamable_http_child_spec/2`.
       * `:interval`: the time between two status checks in milliseconds. The
         default is 1000 for tasks and 100 for clients without tasks.
       * `:task`: the FastestMCP task option of the tools. The default is

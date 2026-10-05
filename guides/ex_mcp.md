@@ -119,17 +119,33 @@ ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPJobs table:
 Many clients do not support the MCP Tasks extension yet. For example, the MCP Inspector uses the TypeScript SDK, and its latest protocol is `2025-11-25`. For these clients, MCPJobs waits for the Oban job and returns the tool result directly. The work still runs in Oban, with retries.
 
 - A failed or cancelled job returns a tool result with `"isError": true`.
-- If the job does not finish in `:wait_timeout` (9 seconds by default), MCPJobs cancels the task and returns an error result.
-- While the call waits, it is blocked. Over HTTP, ExMCP stops a handler call after `:handler_call_timeout` (10 seconds by default). For longer jobs, raise both values:
-
-  ```elixir
-  use MCPJobs.ExMCP, task_store_opts: [wait_timeout: 60_000, interval: 500]
-
-  # and on the plug:
-  Plug.Cowboy.http(ExMCP.HttpPlug, [handler: MyApp.MCPServer, handler_call_timeout: 65_000], port: 4000)
-  ```
-
+- If the job does not finish in `:wait_timeout`, MCPJobs cancels the task and returns an error result.
 - Over stdio, other requests on the same connection wait.
+
+### Time limits
+
+The default `:wait_timeout` is only 9 seconds, because every part of the HTTP chain has its own limit, and a wait that is longer than one of them breaks the call. For longer jobs, raise all of them. Each limit must be longer than the one before it:
+
+| Limit | Default | Where |
+| --- | --- | --- |
+| `:wait_timeout` | 9 seconds | `use MCPJobs.ExMCP, task_store_opts: [wait_timeout: ...]` |
+| `:handler_call_timeout` | 10 seconds | the `ExMCP.HttpPlug` options |
+| `idle_timeout` | 60 seconds | Cowboy only: `protocol_options: [idle_timeout: ...]` |
+
+For example, for 5 minutes:
+
+```elixir
+use MCPJobs.ExMCP, task_store_opts: [wait_timeout: 300_000], tools: [...]
+
+Plug.Cowboy.http(
+  ExMCP.HttpPlug,
+  [handler: MyApp.MCPServer, handler_call_timeout: 305_000],
+  port: 4000,
+  protocol_options: [idle_timeout: 310_000]
+)
+```
+
+`mix mcp_jobs.install` sets these values. Bandit, the default web server of Phoenix, does not stop a request while it runs. A proxy in front of your app can also have a limit, for example `proxy_read_timeout` in nginx (60 seconds by default). The client can have a limit too.
 
 Listed tools have `"execution" => %{"taskSupport" => "optional"}`, so both kinds of client can call them. The generated `handle_initialize/2` returns the `tools` capability, so older clients ask for the tool list.
 

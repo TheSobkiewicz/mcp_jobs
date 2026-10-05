@@ -58,7 +58,14 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     `handle_call_tool/3`.
 
     Set `server_info: %{"name" => ..., "version" => ...}` to change the server
-    name that `initialize` returns.
+    name that `initialize` returns. The handler gets `server_info/0`. Modern
+    requests (MCP `2026-07-28`) have no `initialize`, and ExMCP takes their
+    server name from the transport. Give the same value to `ExMCP.HttpPlug`:
+
+        Plug.Cowboy.http(ExMCP.HttpPlug,
+          handler: MyApp.MCPServer,
+          server_info: MyApp.MCPServer.server_info()
+        )
 
     ## Clients without tasks
 
@@ -68,11 +75,17 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     `"isError" => true`. If the job does not finish in `:wait_timeout`, the task
     is cancelled and the result is an error.
 
+    While it waits, MCPJobs sends the job progress as `notifications/progress`
+    when the request has a `progressToken`. Over HTTP, ExMCP sends these
+    notifications only on a modern request (MCP `2026-07-28`) that accepts
+    `text/event-stream`. Older protocol versions get only the result.
+
     While it waits, the tool call is blocked:
 
       * Over HTTP, ExMCP stops a handler call after `:handler_call_timeout`
         (10 seconds by default). Keep `:wait_timeout` lower, or raise
-        `:handler_call_timeout` on `ExMCP.HttpPlug`.
+        `:handler_call_timeout` on `ExMCP.HttpPlug`. With Cowboy, also raise
+        its `idle_timeout` (60 seconds by default). See the ExMCP guide.
       * Over stdio, other requests on the same connection wait.
 
     Listed tools have `"execution" => %{"taskSupport" => "optional"}`, so that
@@ -121,6 +134,10 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
         @mcp_jobs_tools MCPJobs.ExMCP.__tools__(unquote(tools))
         @mcp_jobs_server_info unquote(server_info) ||
                                 %{"name" => inspect(__MODULE__), "version" => "1.0.0"}
+
+        @doc "Returns the server name and version."
+        @spec server_info() :: map()
+        def server_info, do: @mcp_jobs_server_info
 
         @impl ExMCP.Server.Handler
         def handle_initialize(params, state),

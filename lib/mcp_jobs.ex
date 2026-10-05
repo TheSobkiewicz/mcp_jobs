@@ -166,7 +166,11 @@ defmodule MCPJobs do
     * `:interval`: the time between two status checks in milliseconds. The
       default is 100.
     * `:on_progress`: a function that gets the new progress map (see
-      `progress/4`) each time it changes while the task is working.
+      `progress/4`) each time it changes while the task is working. The
+      `"current"` value always increases, as MCP progress must. A retry starts
+      again from a lower value, so the values after it continue from the last
+      value: `"current"` and `"total"` get that value added. A change that does
+      not increase `"current"` is not sent.
     * `:oban`: the Oban instance name.
   """
   @spec await(String.t(), keyword()) :: {:ok, Task.t()} | {:error, :not_found | :timeout}
@@ -177,7 +181,8 @@ defmodule MCPJobs do
         timeout -> System.monotonic_time(:millisecond) + timeout
       end
 
-    poll(task_id, deadline, Keyword.get(opts, :interval, 100), nil, opts)
+    reported = %{last: nil, sent: nil, offset: 0}
+    poll(task_id, deadline, Keyword.get(opts, :interval, 100), reported, opts)
   end
 
   @doc false
@@ -290,10 +295,10 @@ defmodule MCPJobs do
     end
   end
 
-  defp poll(task_id, deadline, interval, last_progress, opts) do
+  defp poll(task_id, deadline, interval, reported, opts) do
     case get_for_poll(task_id, opts) do
       {:ok, %Task{status: :working, progress: progress}} ->
-        last_progress = report_progress(progress, last_progress, opts)
+        reported = report_progress(progress, reported, opts)
 
         case remaining(deadline) do
           :expired ->
@@ -301,7 +306,7 @@ defmodule MCPJobs do
 
           remaining ->
             Process.sleep(min(interval, remaining))
-            poll(task_id, deadline, interval, last_progress, opts)
+            poll(task_id, deadline, interval, reported, opts)
         end
 
       result ->
@@ -318,15 +323,36 @@ defmodule MCPJobs do
     end
   end
 
-  defp report_progress(nil, last_progress, _opts), do: last_progress
-  defp report_progress(progress, progress, _opts), do: progress
+  defp report_progress(nil, reported, _opts), do: reported
+  defp report_progress(progress, %{last: progress} = reported, _opts), do: reported
 
-  defp report_progress(progress, _last_progress, opts) do
-    with on_progress when is_function(on_progress, 1) <- Keyword.get(opts, :on_progress) do
-      on_progress.(progress)
+  defp report_progress(%{"current" => current} = progress, reported, opts) do
+    offset = progress_offset(current, reported)
+    value = current + offset
+
+    case reported do
+      %{sent: sent} when is_number(sent) and value <= sent ->
+        %{reported | last: progress, offset: offset}
+
+      _increases ->
+        with on_progress when is_function(on_progress, 1) <- Keyword.get(opts, :on_progress) do
+          on_progress.(shift_progress(progress, offset))
+        end
+
+        %{last: progress, sent: value, offset: offset}
     end
+  end
 
-    progress
+  # A lower value than the last one means that a retry started again.
+  defp progress_offset(current, %{last: %{"current" => last}, sent: sent}) when current < last,
+    do: sent
+
+  defp progress_offset(_current, %{offset: offset}), do: offset
+
+  defp shift_progress(progress, 0), do: progress
+
+  defp shift_progress(%{"current" => current} = progress, offset) do
+    Map.replace_lazy(%{progress | "current" => current + offset}, "total", &(&1 + offset))
   end
 
   # A short database outage must not end a long wait: the job keeps running.

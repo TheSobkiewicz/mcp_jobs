@@ -576,6 +576,42 @@ defmodule MCPJobsTest do
       assert_received {:progress, %{"current" => 1, "total" => 2}}
       refute_received {:progress, _}
     end
+
+    test "await keeps the progress increasing after a retry" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPJobs.enqueue(SuccessWorker, %{value: 1})
+
+      test_pid = self()
+
+      waiter =
+        Elixir.Task.async(fn ->
+          MCPJobs.await(task_id,
+            timeout: 1_000,
+            interval: 5,
+            on_progress: &send(test_pid, {:progress, &1})
+          )
+        end)
+
+      for {current, message} <- [{1, "a"}, {2, "b"}, {3, "c"}, {1, "a"}, {1, "same"}, {2, "b"}] do
+        :ok = MCPJobs.progress(running_job(job_id), current, 6, message)
+        Process.sleep(50)
+      end
+
+      assert {:error, :timeout} = Elixir.Task.await(waiter)
+
+      for {current, total, message} <- [
+            {1, 6, "a"},
+            {2, 6, "b"},
+            {3, 6, "c"},
+            {4, 9, "a"},
+            {5, 9, "b"}
+          ] do
+        assert_received {:progress,
+                         %{"current" => ^current, "total" => ^total, "message" => ^message}}
+      end
+
+      refute_received {:progress, _}
+    end
   end
 
   describe "races" do

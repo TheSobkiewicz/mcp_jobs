@@ -100,21 +100,28 @@ It creates the migration and an MCP server module, and prints the next steps. In
 
 ## Example
 
-`examples/report_server` is a small app with one tool. Its demo calls the tool, waits for the result, and cancels a running job:
+`examples/deep_thought` is a small app with one tool, `answer_ultimate_question`. It takes 7.5 million years (about 3 seconds). Its demo shows all features:
+
+- **Progress and push notifications:** "Thinking. 3 million years have passed (3/6)"
+- **Retry:** on the first attempt a mouse interrupts the calculation. Oban retries the job, and the task stays `working`.
+- **Cancel:** the Vogons demolish the Earth during the calculation.
+- **Safe errors:** Deep Thought cannot compute the Ultimate Question itself. The client gets only the message, and the details stay on the server.
 
 ```sh
-cd examples/report_server
+cd examples/deep_thought
 mix deps.get
 mix ecto.create && mix ecto.migrate
 mix run demo.exs
 ```
+
+Stop `serve.exs` and `serve_fastest.exs` before you run the demo. They use the same queue, so they can take its jobs.
 
 To use it from another MCP client, start it over HTTP on port 4000:
 
 ```sh
 mix run --no-halt serve.exs
 npx @modelcontextprotocol/inspector --cli http://localhost:4000/ --transport http \
-  --method tools/call --tool-name generate_report --tool-arg steps=3
+  --method tools/call --tool-name answer_ultimate_question
 ```
 
 The same worker with FastestMCP runs on port 4001: `mix run serve_fastest.exs`, then use `http://localhost:4001/mcp`.

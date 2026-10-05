@@ -52,7 +52,7 @@ A small Elixir library that connects MCP Tasks to Oban jobs. An MCP tool puts it
 - `MCPJobs.FastestMCP`: the FastestMCP adapter (`add_tools/3`). Each tool inserts a job and waits for it; FastestMCP owns the MCP task. A watcher process cancels the MCPJobs task when FastestMCP kills the waiting tool. Also optional and inside `if Code.ensure_loaded?(...)`.
 - `MCPJobs.FastestMCP.TaskBackend`: a FastestMCP `TaskBackend` on the `mcp_jobs_fastest_tasks` table. After a restart it keeps tasks of MCPJobs tools working and shows the MCPJobs task state, using `FastestMCP.ResultNormalizer.normalize_tool/1` for results.
 - `MCPJobs.ToolSpec`: builds the tool list (name, description, input schema) for both adapters.
-- `examples/report_server`: an example app. Run `mix run demo.exs` in it to check the full flow with real Oban queues.
+- `examples/deep_thought`: an example app (Deep Thought computes 42). Run `mix run demo.exs` in it to check the full flow with real Oban queues: progress, notifications, retry, cancel and a failed task.
 - MCPJobs uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
 - Tests that kill processes in the middle of a query use `@tag :unsandboxed` (see `test/support/data_case.ex`).
 - `MCPJobs.Migration` creates both tables in one step, with no versions (nothing is released yet). Add versions only when a release must change existing tables.

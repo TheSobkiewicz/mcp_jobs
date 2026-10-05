@@ -106,7 +106,10 @@ defmodule Mix.Tasks.McpJobs.Install do
     route = """
 
       scope "/mcp" do
-        forward "/", ExMCP.HttpPlug, handler: #{server}, protocol_mode: :prefer_modern
+        forward "/", ExMCP.HttpPlug,
+          handler: #{server},
+          protocol_mode: :prefer_modern,
+          handler_call_timeout: 305_000
       end
     end
     """
@@ -181,11 +184,22 @@ defmodule Mix.Tasks.McpJobs.Install do
 
           4. Serve the MCP server. In a Phoenix router (or run with --phoenix):
 
-                 forward "/mcp", ExMCP.HttpPlug, handler: #{server}, protocol_mode: :prefer_modern
+                 forward "/mcp", ExMCP.HttpPlug,
+                   handler: #{server},
+                   protocol_mode: :prefer_modern,
+                   handler_call_timeout: 305_000
 
              Or start it alone:
 
-                 Plug.Cowboy.http(ExMCP.HttpPlug, [handler: #{server}, protocol_mode: :prefer_modern], port: 4000)
+                 Plug.Cowboy.http(
+                   ExMCP.HttpPlug,
+                   [handler: #{server}, protocol_mode: :prefer_modern, handler_call_timeout: 305_000],
+                   port: 4000,
+                   protocol_options: [idle_timeout: 310_000]
+                 )
+
+             Clients without MCP Tasks wait up to 5 minutes for a job. The HTTP
+             timeouts must be longer than this wait.
           """
 
         true ->
@@ -243,6 +257,8 @@ defmodule Mix.Tasks.McpJobs.Install do
     \"\"\"
 
     use MCPJobs.ExMCP,
+      # Clients without MCP Tasks wait up to 5 minutes for a job.
+      task_store_opts: [wait_timeout: 300_000],
       tools: [
         # MyApp.Workers.GenerateReport
       ]

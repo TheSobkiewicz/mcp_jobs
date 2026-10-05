@@ -1,9 +1,9 @@
-defmodule ReportServer.MixProject do
+defmodule DeepThought.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :report_server,
+      app: :deep_thought,
       version: "0.1.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
@@ -14,7 +14,7 @@ defmodule ReportServer.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {ReportServer.Application, []}
+      mod: {DeepThought.Application, []}
     ]
   end
 

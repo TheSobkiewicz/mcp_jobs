@@ -27,6 +27,7 @@ defmodule Mix.Tasks.McpJobs.InstallTest do
       assert File.read!(migration) =~ "defmodule MCPJobs.Test.Repo.Migrations.AddMCPJobsTasks do"
       assert File.read!(migration) =~ ~s{MCPJobs.Migration.up(prefix: "private")}
       assert File.read!("lib/shop/mcp_server.ex") =~ "use MCPJobs.ExMCP,"
+      assert File.read!("lib/shop/mcp_server.ex") =~ "task_store_opts: [wait_timeout: 300_000]"
 
       assert [{MCPJobs.Test.Repo.Migrations.AddMCPJobsTasks, _}] = Code.compile_file(migration)
       assert [{Shop.MCPServer, _}] = Code.compile_file("lib/shop/mcp_server.ex")
@@ -35,6 +36,8 @@ defmodule Mix.Tasks.McpJobs.InstallTest do
       assert next_steps =~ "mix ecto.migrate"
       assert next_steps =~ "MCPJobs.Cleaner"
       assert next_steps =~ "handler: Shop.MCPServer"
+      assert next_steps =~ "handler_call_timeout: 305_000"
+      assert next_steps =~ "idle_timeout: 310_000"
 
       Mix.Tasks.McpJobs.Install.run(["--no-server"])
 
@@ -66,7 +69,10 @@ defmodule Mix.Tasks.McpJobs.InstallTest do
 
       assert router =~ """
                scope "/mcp" do
-                 forward "/", ExMCP.HttpPlug, handler: Shop.MCPServer, protocol_mode: :prefer_modern
+                 forward "/", ExMCP.HttpPlug,
+                   handler: Shop.MCPServer,
+                   protocol_mode: :prefer_modern,
+                   handler_call_timeout: 305_000
                end
              end
              """
