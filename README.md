@@ -4,26 +4,36 @@
 
 MCPJobs is a small Elixir library that runs MCP tool calls as [Oban](https://hex.pm/packages/oban) jobs.
 
-An MCP tool call usually blocks until the tool is done. This is a problem for slow work: the client waits, the connection can time out, and a restart loses the work.
+An MCP tool call usually blocks until the tool is done. This is a problem for slow work, such as reports, exports, file processing, slow external APIs, data imports, or bulk emails. The client waits, the connection can time out, and a restart loses the work.
 
-For example, a tool can:
+With MCPJobs, the tool call gives back an MCP task at once, and Oban does the work in the background.
 
-- Generate a report or an export
-- Process an uploaded file
-- Call a slow external API
-- Import or sync data
-- Send many emails
+## Features
 
----
+**No timeouts, no lost work**
 
-With MCPJobs, the tool call gives back an MCP task at once, and Oban does the work in the background, with retries. The MCP task status follows the Oban job state, so a retry does not make the task fail:
+- The tool call returns a task ID at once. A 10-minute job does not keep a request open.
+- The work runs as an Oban job, with Oban queues, retries, and backoff.
+- Tasks are stored in PostgreSQL, so they survive restarts and deploys. Every node can read them.
 
-| Oban job state                                                  | MCP task status |
-| --------------------------------------------------------------- | --------------- |
-| `available`, `scheduled`, `executing`, `retryable`, `suspended` | `working`       |
-| `completed`                                                     | `completed`     |
-| `discarded` (all attempts failed)                               | `failed`        |
-| `cancelled`, or the job is deleted                              | `cancelled`     |
+**A task status you can trust**
+
+- **A retry does not fail the task.** The task fails only when Oban discards the job.
+- **No races.** Each status change is one conditional database update, so the first change wins. A task that completes while a client cancels it is never both.
+- **Self-repair.** If a node stops before MCPJobs saves the final state, the next read fixes the task from the Oban job.
+
+**Tools for long workers**
+
+- **Progress:** `MCPJobs.progress(job, 2, 5, "Rendering")` reaches the client as a status message and as notifications. The value never goes down, also after a retry.
+- **Cancellation:** a waiting job is cancelled in Oban. A running worker checks `MCPJobs.cancelled?(job)` and stops cleanly.
+- **Safe errors:** the client gets only the error message. The details stay on the server.
+
+**Easy to adopt**
+
+- **Plain Oban workers.** They do not need to know about MCP. The `perform/1` return value becomes the task result. Oban Web still shows every job.
+- **Tool list from your code.** The `@moduledoc` becomes the tool description. The input schema comes from the tool options or from an Oban Pro args schema. Oban Pro is not required.
+- **Works with older clients.** A client without MCP Tasks gets the result directly. The work still runs in Oban.
+- **Small.** It does not implement the MCP protocol. It plugs into [ExMCP](https://hex.pm/packages/ex_mcp) or [FastestMCP](https://hex.pm/packages/fastest_mcp), and the core API works without an MCP library. It starts no processes and has no repo config of its own.
 
 ## Usage
 
@@ -66,13 +76,14 @@ end
 {"taskId": "...", "status": "completed", "result": {"structuredContent": {"url": "..."}}}
 ```
 
-## Why MCPJobs?
+The MCP task status follows the Oban job state:
 
-- **Your workers stay plain Oban workers.** They do not need to know about MCP. You keep Oban queues, retries, uniqueness, and the Oban Web dashboard.
-- **No lost work.** Tasks are stored in PostgreSQL, so they survive a restart, and every node can read them.
-- **Safe state changes.** Each status change is one conditional database update, so the first change wins. A task that completes while a client cancels it is never both.
-- **Works with older clients.** A client without MCP Tasks gets the result directly. The work still runs in Oban.
-- **Small.** It does not implement the MCP protocol. It plugs into [ExMCP](https://hex.pm/packages/ex_mcp) or [FastestMCP](https://hex.pm/packages/fastest_mcp), and the core API works without an MCP library.
+| Oban job state                                                  | MCP task status |
+| --------------------------------------------------------------- | --------------- |
+| `available`, `scheduled`, `executing`, `retryable`, `suspended` | `working`       |
+| `completed`                                                     | `completed`     |
+| `discarded` (all attempts failed)                               | `failed`        |
+| `cancelled`, or the job is deleted                              | `cancelled`     |
 
 ## Installation
 
