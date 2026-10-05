@@ -85,3 +85,41 @@ defmodule MCPO.Test.HiddenDocWorker do
   @impl Oban.Worker
   def perform(%Oban.Job{}), do: :ok
 end
+
+defmodule MCPO.Test.ProWorker.Data do
+  @moduledoc false
+  def __args_schema__,
+    do: [office_id: [required: true, type: :uuid], has_notes: [default: false, type: :boolean]]
+end
+
+defmodule MCPO.Test.ProWorker.Addresses do
+  @moduledoc false
+  def __args_schema__, do: [city: [type: :string]]
+end
+
+defmodule MCPO.Test.ProWorker do
+  @moduledoc false
+  use Oban.Worker
+
+  # The same format as `__args_schema__/0` of an Oban Pro structured worker.
+  def __args_schema__ do
+    [
+      id: [required: true, type: :id],
+      name: [required: true, type: :string],
+      mode: [values: [:enabled, :disabled], default: :enabled, type: :enum],
+      tags: [type: {:array, :string}],
+      at: [type: :utc_datetime],
+      xtra: [type: :term],
+      data: [cardinality: :one, module: MCPO.Test.ProWorker.Data, required: true, type: :embed],
+      addresses: [
+        cardinality: :many,
+        module: MCPO.Test.ProWorker.Addresses,
+        required: false,
+        type: :embed
+      ]
+    ]
+  end
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: :ok
+end

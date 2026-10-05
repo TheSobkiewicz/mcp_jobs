@@ -10,7 +10,7 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 - Keep the library small and simple. Do not repeat what Oban already does.
 - An Oban retry must not make the MCP task fail. The task fails only when Oban discards the job.
 - Use database constraints for idempotency and state transitions. Do not rely only on application checks.
-- Do not use Oban Pro features.
+- Do not depend on Oban Pro. Only `MCPO.ArgsSchema` reads Oban Pro data (`__args_schema__/0`), with no compile-time dependency.
 - Keep to the MVP scope in the spec.
 
 ## Toolchain

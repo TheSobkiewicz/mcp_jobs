@@ -38,6 +38,10 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     A worker with `use MCPO.Tool` gives its own name, description (from
     `@moduledoc`) and input schema. The options in the `tools:` list override them.
 
+    An Oban Pro worker with `args_schema` gets its input schema from it: field
+    types, `required: true`, defaults, enum values, and embedded fields. Unknown
+    keys are not allowed, as in Oban Pro. An `:input_schema` option overrides it.
+
     ## Generated callbacks
 
     `use MCPO.ExMCP` is `use ExMCP.Server.Handler` with `MCPO.ExMCP.Store` as
@@ -208,7 +212,11 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       end
 
       opts = Keyword.merge(MCPO.Tool.options(worker), opts)
-      input_schema = Keyword.get(opts, :input_schema, %{"type" => "object"})
+
+      input_schema =
+        Keyword.get_lazy(opts, :input_schema, fn ->
+          MCPO.ArgsSchema.from_worker(worker) || %{"type" => "object"}
+        end)
 
       case SchemaValidator.compile_schema(input_schema) do
         {:ok, _compiled} ->

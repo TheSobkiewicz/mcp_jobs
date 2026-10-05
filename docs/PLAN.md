@@ -107,3 +107,7 @@ Test with the MCP Inspector (TypeScript SDK 1.29, latest protocol `2025-11-25`) 
 - Listed tools check the arguments against `input_schema` with `ExMCP.Content.SchemaValidator` (ExJsonSchema, with ExMCP's schema limits) before a job is inserted. Invalid arguments return an `isError` tool result. The schema is compiled at compile time.
 - `mix mcpo.install` is a plain Mix task (no Igniter): it creates the migration and, with `ex_mcp`, an MCP server module, then prints the next steps.
 - Later: explain per-tool job options (idea 2) to the user.
+
+## Oban Pro args_schema (2026-10-05)
+
+The spec excludes Oban Pro features from the MVP. On user request, MCPO now reads the `args_schema` of an Oban Pro worker (`__args_schema__/0`, undocumented by Pro, same format in Pro 1.5 to 1.7.10) and builds the input schema from it. There is no dependency on Oban Pro. Tests use a fake worker with the same format. Checked once with real Oban Pro 1.7.10: MCPO and Pro accept and reject the same arguments.

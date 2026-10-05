@@ -128,7 +128,8 @@ Each value comes from the first place that has it:
 1. The options in the `tools:` list
 2. `use MCPO.Tool` options (`:name`, `:description`, `:input_schema`)
 3. The worker's `@moduledoc` (description only, with `use MCPO.Tool`)
-4. The default:
+4. The `args_schema` of an Oban Pro worker (input schema only, see below)
+5. The default:
 
 | Option          | Default                                                        |
 | --------------- | -------------------------------------------------------------- |
@@ -137,6 +138,46 @@ Each value comes from the first place that has it:
 | `:input_schema` | `%{"type" => "object"}` (any arguments)                        |
 
 The tool arguments become the job args. MCPO checks them against the input schema first. Invalid arguments get back a tool result with `"isError": true` and a list of the problems, and no job starts. The AI model can then correct its call. An invalid input schema stops the build with an error.
+
+### Oban Pro workers
+
+An Oban Pro worker with `args_schema` needs no `input_schema`. MCPO builds it from the fields:
+
+```elixir
+defmodule MyApp.Workers.UpdateOffice do
+  @moduledoc "Updates an office."
+  use Oban.Pro.Worker
+  use MCPO.Tool
+
+  args_schema do
+    field :id, :id, required: true
+    field :mode, :enum, values: ~w(enabled disabled)a, default: :enabled
+
+    embeds_one :data, required: true do
+      field :office_id, :uuid, required: true
+    end
+  end
+
+  @impl Oban.Pro.Worker
+  def process(_job), do: :ok
+end
+```
+
+| `args_schema`                                    | JSON Schema                                           |
+| ------------------------------------------------ | ----------------------------------------------------- |
+| `:id`, `:integer`                                | `integer`                                             |
+| `:float`, `:decimal`                             | `number`                                              |
+| `:string`, `:binary`                             | `string`                                              |
+| `:boolean`                                       | `boolean`                                             |
+| `:uuid`, `:binary_id`                            | `string`, format `uuid`                               |
+| `:date`, `:time`, `:utc_datetime`, and similar   | `string`, format `date`, `time` or `date-time`        |
+| `:map`                                           | `object`                                              |
+| `:enum`                                          | `string` with `enum` values                           |
+| `{:array, type}`                                 | `array` of `type`                                     |
+| `embeds_one`, `embeds_many`                      | `object`, or `array` of `object`                      |
+| `:term`                                          | any value                                             |
+
+`required: true` and `default:` are kept. Unknown keys are not allowed, as in Oban Pro. MCPO does not depend on Oban Pro: it reads the schema from `__args_schema__/0`, which Oban Pro defines. This function is not documented by Oban Pro, so a future Pro version can change it. MCPO was checked with Oban Pro 1.5 to 1.7.10.
 
 `use MCPO.ExMCP` is `use ExMCP.Server.Handler` with the MCPO task store. It defines `handle_initialize/2`, `handle_list_tools/2`, and `handle_call_tool/3`. Other handler options are passed on to ExMCP. Set `server_info: %{"name" => ..., "version" => ...}` to change the server name.
 
