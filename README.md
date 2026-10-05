@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-MCPJobs is a small Elixir library that runs MCP tool calls as [Oban](https://hex.pm/packages/oban) jobs.
+MCPJobs is a small Elixir library that turns [Oban](https://hex.pm/packages/oban) workers into MCP tools. Each tool call becomes an Oban job, and the client follows it as an MCP task.
 
 An MCP tool call usually blocks until the tool is done. This is a problem for slow work, such as reports, exports, file processing, slow external APIs, data imports, or bulk emails. The client waits, the connection can time out, and a restart loses the work.
 
