@@ -27,7 +27,7 @@ def deps do
 end
 ```
 
-MCPOban needs [Oban](https://hexdocs.pm/oban). Set up Oban first, then run:
+MCPOban needs [Oban](https://hexdocs.pm/oban) with PostgreSQL. It does not work with the MySQL or SQLite engines of Oban. Set up Oban first, then run:
 
 ```sh
 mix mcp_oban.install
@@ -78,7 +78,7 @@ The return value of `perform/1` becomes the task result:
 - `:ok` completes the task with no result.
 - `{:error, reason}` makes Oban retry the job. The task stays `working`.
 
-The result is stored as JSON, so atom keys come back as strings. The result must be JSON-safe: for example, no tuples or PIDs.
+The result is stored as JSON, so atom keys come back as strings. The result must be JSON-safe: for example, no tuples or PIDs. A struct such as `DateTime` is saved as `%{"value" => ...}`.
 
 > **Note:** Oban marks the job `completed` first, and then MCPOban saves the result from the Oban telemetry event. Between these two steps the task stays `working`. If the result is not saved within 5 seconds (for example, the node stopped), the task becomes `completed` with no result. Change the time with `config :mcp_oban, result_grace_period: 5_000`.
 >
@@ -201,7 +201,7 @@ Also define `handle_list_tools/2` and add your tool to the list from `super`. `c
 ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPOban table:
 
 - A completed task returns its result as a tool call result. The result map is in `structuredContent`, and as JSON text in `content`. If your result already has a `"content"` list of content blocks, it is sent without change.
-- A failed task returns a JSON-RPC error.
+- A failed task returns a JSON-RPC error with only the safe error message (see [Errors](#errors)).
 - Each task is bound to the ExMCP owner (principal, tenant, and audience). Other owners cannot read or cancel it.
 
 ### Clients without tasks
@@ -213,7 +213,7 @@ Many clients do not support the MCP Tasks extension yet. For example, the MCP In
 - While the call waits, it is blocked. Over HTTP, ExMCP stops a handler call after `:handler_call_timeout` (10 seconds by default). For longer jobs, raise both values:
 
   ```elixir
-  use MCPOban.ExMCP, task_store_opts: [wait_timeout: 60_000]
+  use MCPOban.ExMCP, task_store_opts: [wait_timeout: 60_000, interval: 500]
 
   # and on the plug:
   Plug.Cowboy.http(ExMCP.HttpPlug, [handler: MyApp.MCPServer, handler_call_timeout: 65_000], port: 4000)
@@ -231,7 +231,7 @@ Listed tools have `"execution" => %{"taskSupport" => "optional"}`, so both kinds
 
 ## Use with FastestMCP
 
-Add `{:fastest_mcp, "~> 0.3"}` to your deps. Then add your workers as tools:
+Add `{:fastest_mcp, "~> 0.3.2"}` to your deps. Then add your workers as tools:
 
 ```elixir
 server =
@@ -250,9 +250,9 @@ Each tool call inserts an Oban job and waits for it. FastestMCP decides how the 
 - A client without tasks waits for the result. If the job does not finish in `:wait_timeout` (9 seconds by default), MCPOban cancels it and returns an error result.
 - A failed or cancelled job returns a tool result with `isError: true`.
 
-When FastestMCP cancels a task, it stops the waiting tool process. MCPOban then cancels the MCPOban task and its job.
+When a client cancels a FastestMCP task (`tasks/cancel`), FastestMCP stops the waiting tool process. MCPOban then cancels the MCPOban task and its job. When the tool process stops for another reason (the server stops, the client disconnects, or the wait fails), the job keeps running and the MCPOban task finishes as usual.
 
-Options of `add_tools/3`: `:oban`, `:job`, `:kill`, `:wait_timeout`, and `:task` (the FastestMCP task option, default `[mode: :optional]`).
+Options of `add_tools/3`: `:oban`, `:job`, `:kill`, `:wait_timeout`, `:interval` (the time between two status checks: 1000 ms for tasks, 100 ms without tasks), and `:task` (the FastestMCP task option, default `[mode: :optional]`).
 
 Limit: FastestMCP keeps its tasks in memory by default. After a restart, clients cannot read FastestMCP tasks from before the restart, even though the Oban job and the MCPOban task still exist.
 
@@ -276,6 +276,22 @@ To make an adapter for a different MCP server, use `MCPOban.enqueue/3`, `MCPOban
 ### Duplicate requests
 
 Give the MCP task ID as `task_id:`. If a task with this ID already exists for the same worker and owner, `enqueue/3` returns it and does not insert a second job. If the worker or the owner is different, it returns `{:error, :already_exists}`, so one owner never gets another owner's task. A unique index in the database enforces this, also for requests that arrive at the same time.
+
+## Errors
+
+When a job fails for good, the task error is:
+
+```elixir
+%{"message" => "The task failed.", "details" => "...the exception or the returned reason..."}
+```
+
+MCP clients get only `"message"`. The `"details"` can hold internal data (secrets, database values, stack traces), so they stay on the server: in `MCPOban.status/2` and in the `mcp_oban_tasks` table.
+
+To choose the message that clients see, return it from `perform/1`:
+
+```elixir
+{:error, %{"message" => "The report period is empty."}}
+```
 
 ## Cancellation
 

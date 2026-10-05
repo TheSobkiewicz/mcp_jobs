@@ -147,3 +147,52 @@ defmodule MCPOban.Test.NulWorker do
   @impl Oban.Worker
   def perform(%Oban.Job{}), do: {:ok, %{"text" => "a\u0000b"}}
 end
+
+defmodule MCPOban.Test.ClientMessageWorker do
+  @moduledoc false
+  use Oban.Worker, max_attempts: 1
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{args: %{"atom_key" => true}}),
+    do: {:error, %{message: "Chosen message.", secret: "s3"}}
+
+  def perform(%Oban.Job{}), do: {:error, %{"message" => "Chosen message.", "secret" => "s3"}}
+end
+
+defmodule MCPOban.Test.StructResultWorker do
+  @moduledoc false
+  use Oban.Worker
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: {:ok, ~U[2026-01-01 00:00:00Z]}
+end
+
+defmodule MCPOban.Test.EscapedNulWorker do
+  @moduledoc false
+  use Oban.Worker
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: {:ok, %{"text" => "use \\u0000 to escape NUL"}}
+end
+
+defmodule MCPOban.Test.ExceptionReasonWorker do
+  @moduledoc false
+  use Oban.Worker, max_attempts: 1
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: {:error, %RuntimeError{message: "API key sk-secret was rejected"}}
+end
+
+defmodule MCPOban.Test.NulStruct do
+  @moduledoc false
+  @derive Jason.Encoder
+  defstruct [:text]
+end
+
+defmodule MCPOban.Test.NulStructWorker do
+  @moduledoc false
+  use Oban.Worker
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: {:ok, %{"x" => %MCPOban.Test.NulStruct{text: "a\u0000b"}}}
+end

@@ -48,10 +48,10 @@ defmodule MCPOban.ExMCPTest do
     {task_id, _created} = create(FailingWorker, %{})
     drain()
 
-    assert {:ok, %{"status" => "failed", "error" => %{"code" => -32_603, "message" => message}}} =
-             Tasks.get(task_id, opts())
+    assert {:ok, %{"status" => "failed", "error" => error} = task} = Tasks.get(task_id, opts())
 
-    assert message =~ "boom"
+    assert error == %{"code" => -32_603, "message" => "The task failed."}
+    refute inspect(task) =~ "boom"
   end
 
   test "cancel cancels the task and its job" do
@@ -111,6 +111,23 @@ defmodule MCPOban.ExMCPTest do
 
     assert {:error, :invalid_transition} = Tasks.fail(task_id, %{"message" => "late"}, opts())
     assert {:error, :invalid_transition} = Tasks.put_status_message(task_id, "hi", opts())
+  end
+
+  test "an owner with atom values can create and read a task" do
+    atom_owner = [
+      store: MCPOban.ExMCP.Store,
+      owner: %{principal_id: :alice, tenant_id: "t", audience: "mcp"},
+      notify: false
+    ]
+
+    assert {:ok, %{"taskId" => task_id}} =
+             Tasks.create(
+               "generate_report",
+               %{"value" => 1},
+               [worker: SuccessWorker] ++ atom_owner
+             )
+
+    assert {:ok, %{"status" => "working"}} = Tasks.get(task_id, atom_owner)
   end
 
   test "create without a worker is rejected" do

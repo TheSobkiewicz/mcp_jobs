@@ -30,8 +30,19 @@ defmodule MCPOban.Status do
   def to_map(%MCPOban.Task{status: :failed, error: error}), do: %{status: :failed, error: error}
   def to_map(%MCPOban.Task{status: status}), do: %{status: status}
 
+  @failed_message "The task failed."
+
+  @doc false
+  @spec failed_message() :: String.t()
+  def failed_message, do: @failed_message
+
+  @doc false
+  # The task error: a message for MCP clients and details for operators only.
+  @spec failed_error(String.t() | nil) :: map()
+  def failed_error(details), do: %{"message" => @failed_message, "details" => details}
+
   @doc false
   @spec error_message(map() | nil) :: String.t()
   def error_message(%{"message" => message}) when is_binary(message), do: message
-  def error_message(_error), do: "Task failed"
+  def error_message(_error), do: @failed_message
 end

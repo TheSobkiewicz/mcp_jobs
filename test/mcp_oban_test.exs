@@ -129,8 +129,12 @@ defmodule MCPObanTest do
 
       assert %{failure: 1, discard: 1} = drain()
       assert %Task{status: :failed} = Repo.get_by(Task, task_id: task_id)
-      assert {:ok, %{status: :failed, error: %{"message" => message}}} = MCPOban.status(task_id)
-      assert message =~ "boom"
+
+      assert {:ok,
+              %{status: :failed, error: %{"message" => "The task failed.", "details" => details}}} =
+               MCPOban.status(task_id)
+
+      assert details =~ "boom"
 
       assert_received {:telemetry, [:mcp_oban, :task, :failed], _, %{task_id: ^task_id}}
     end
@@ -140,7 +144,9 @@ defmodule MCPObanTest do
 
       drain()
 
-      assert {:ok, %{status: :failed, error: %{"message" => "crash"}}} = MCPOban.status(task_id)
+      assert {:ok,
+              %{status: :failed, error: %{"message" => "The task failed.", "details" => "crash"}}} =
+               MCPOban.status(task_id)
     end
   end
 
@@ -234,7 +240,9 @@ defmodule MCPObanTest do
         set: [state: "discarded", errors: [%{"attempt" => 1, "at" => "now", "error" => "lost"}]]
       )
 
-      assert {:ok, %{status: :failed, error: %{"message" => "lost"}}} = MCPOban.status(task_id)
+      assert {:ok,
+              %{status: :failed, error: %{"message" => "The task failed.", "details" => "lost"}}} =
+               MCPOban.status(task_id)
     end
 
     test "cancels a working task when its job is deleted" do
@@ -400,6 +408,113 @@ defmodule MCPObanTest do
 
       assert ^blocks =
                MCPOban.ExMCP.Store.call_tool_result(%Task{status: :completed, result: blocks})
+    end
+  end
+
+  describe "release review" do
+    test "a worker can choose the client message, and the details stay on the server" do
+      for args <- [%{}, %{"atom_key" => true}] do
+        {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(MCPOban.Test.ClientMessageWorker, args)
+        drain()
+
+        assert {:ok,
+                %{status: :failed, error: %{"message" => "Chosen message.", "details" => details}}} =
+                 MCPOban.status(task_id)
+
+        assert details =~ "s3"
+      end
+    end
+
+    test "a struct result is saved as a value and stays readable" do
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(MCPOban.Test.StructResultWorker, %{})
+      drain()
+
+      assert {:ok, %{status: :completed, result: %{"value" => "2026-01-01T00:00:00Z"}}} =
+               MCPOban.status(task_id)
+    end
+
+    test "a literal backslash-u0000 text is a valid result" do
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(MCPOban.Test.EscapedNulWorker, %{})
+      drain()
+
+      assert {:ok, %{status: :completed, result: %{"text" => "use \\u0000 to escape NUL"}}} =
+               MCPOban.status(task_id)
+    end
+
+    test "a repeated enqueue finds the task when the owner has atom values" do
+      opts = [task_id: "owner-atoms", owner: %{role: :admin, id: 1}]
+      {:ok, %Task{id: id}} = MCPOban.enqueue(SuccessWorker, %{value: 1}, opts)
+
+      assert {:ok, %Task{id: ^id}} = MCPOban.enqueue(SuccessWorker, %{value: 1}, opts)
+    end
+
+    test "an exception as the error reason never reaches the client message" do
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(MCPOban.Test.ExceptionReasonWorker, %{})
+      drain()
+
+      assert {:ok,
+              %{status: :failed, error: %{"message" => "The task failed.", "details" => details}}} =
+               MCPOban.status(task_id)
+
+      assert details =~ "sk-secret"
+    end
+
+    test "a struct with a NUL character fails the task" do
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(MCPOban.Test.NulStructWorker, %{})
+      drain()
+
+      assert %Task{
+               status: :failed,
+               error: %{"message" => "The result could not be saved as JSON."}
+             } =
+               Repo.get_by(Task, task_id: task_id)
+    end
+
+    test "a result that cannot be saved as JSON keeps the reason in details" do
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(MCPOban.Test.TupleWorker, %{})
+      drain()
+
+      assert %Task{error: %{"details" => "Protocol.UndefinedError"}} =
+               Repo.get_by(Task, task_id: task_id)
+    end
+
+    test "a read between the discard and the telemetry event keeps the chosen message" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPOban.enqueue(MCPOban.Test.ClientMessageWorker, %{})
+
+      Repo.update_all(where(Oban.Job, id: ^job_id),
+        set: [state: "discarded", discarded_at: DateTime.utc_now()]
+      )
+
+      assert {:ok, %{status: :working}} = MCPOban.status(task_id)
+
+      MCPOban.Telemetry.handle_event(
+        [:oban, :job, :exception],
+        %{},
+        %{
+          job: Repo.get(Oban.Job, job_id),
+          state: :discard,
+          conf: Oban.config(),
+          result: {:error, %{"message" => "Chosen message."}}
+        },
+        nil
+      )
+
+      assert {:ok, %{status: :failed, error: %{"message" => "Chosen message."}}} =
+               MCPOban.status(task_id)
+    end
+
+    @tag :unsandboxed
+    test "the migration can run two times" do
+      Repo.query!("CREATE SCHEMA IF NOT EXISTS mcp_oban_twice")
+      on_exit(fn -> Repo.query!("DROP SCHEMA mcp_oban_twice CASCADE") end)
+
+      assert [1] =
+               Ecto.Migrator.run(Repo, [{1, MCPOban.Test.TwiceMigration}], :up,
+                 all: true,
+                 log: false,
+                 prefix: "mcp_oban_twice"
+               )
     end
   end
 

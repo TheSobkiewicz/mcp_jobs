@@ -13,11 +13,13 @@ defmodule MCPOban.Migration do
 
   The table must be in the same prefix as the Oban tables. Pass `prefix: "..."`
   when Oban uses a prefix other than `"public"`.
+
+  It needs PostgreSQL. It is safe to run more than once.
   """
 
   use Ecto.Migration
 
-  @doc "Creates the table, its indexes and its constraints."
+  @doc "Creates the table, its indexes and its constraint, when they do not exist."
   @spec up(keyword()) :: :ok
   def up(opts \\ []) do
     prefix = Keyword.get(opts, :prefix, "public")
@@ -40,10 +42,20 @@ defmodule MCPOban.Migration do
     create_if_not_exists index(:mcp_oban_tasks, [:oban_job_id], prefix: prefix)
     create_if_not_exists index(:mcp_oban_tasks, [:status, :updated_at], prefix: prefix)
 
-    create constraint(:mcp_oban_tasks, :mcp_oban_tasks_status_check,
-             check: "status IN (#{statuses})",
-             prefix: prefix
-           )
+    execute """
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'mcp_oban_tasks_status_check'
+          AND conrelid = '"#{prefix}"."mcp_oban_tasks"'::regclass
+      ) THEN
+        ALTER TABLE "#{prefix}"."mcp_oban_tasks"
+          ADD CONSTRAINT mcp_oban_tasks_status_check CHECK (status IN (#{statuses}));
+      END IF;
+    END
+    $$;
+    """
 
     :ok
   end

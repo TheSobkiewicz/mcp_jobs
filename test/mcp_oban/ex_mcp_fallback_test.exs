@@ -56,7 +56,7 @@ defmodule MCPOban.ExMCPFallbackTest do
              ExMCP.Client.call_tool(client, "failing_report", %{}, format: :map)
 
     stop_jobs.()
-    assert text =~ "boom"
+    assert text == "The task failed."
   end
 
   test "a job that does not finish in time is cancelled" do
@@ -104,7 +104,7 @@ defmodule MCPOban.ExMCPFallbackTest do
     assert %{"isError" => true, "content" => [%{"text" => text}]} =
              MCPOban.ExMCP.__timed_out__(failed, 100, [])
 
-    assert text =~ "boom"
+    assert text == "The task failed."
   end
 
   # Sets the first job that appears to "executing", as if a queue had started it.

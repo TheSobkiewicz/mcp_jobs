@@ -10,12 +10,18 @@ defmodule MCPOban do
   becomes the task result:
 
     * `{:ok, map}`: the task becomes `:completed` with the map as its result.
-    * `{:ok, value}`: the result is `%{"value" => value}`.
+    * `{:ok, value}`: the result is `%{"value" => value}`. This includes
+      structs such as `DateTime` or `Decimal`.
     * `:ok`: the task becomes `:completed` with no result.
     * `{:error, reason}`: Oban retries the job and the task stays `:working`.
 
   The result is stored as JSON, so atom keys come back as strings. A result
   that cannot be stored as JSON makes the task `:failed`.
+
+  When the job fails for good, the task error is
+  `%{"message" => "The task failed.", "details" => ...}`. MCP adapters send only
+  `"message"` to clients, because the details can hold internal data. To choose
+  the client message, return `{:error, %{"message" => "..."}}` from `perform/1`.
 
   Oban marks the job completed before MCPOban saves the result. Until the result
   is saved, the task stays `:working`. If the result is not saved within 5
@@ -33,6 +39,9 @@ defmodule MCPOban do
 
   MCPOban does not implement the MCP protocol. An MCP server adapter translates
   these functions into MCP messages.
+
+  MCPOban needs PostgreSQL. It does not work with the MySQL or SQLite engines
+  of Oban.
 
   ## Options
 
@@ -70,7 +79,7 @@ defmodule MCPOban do
     conf = config(opts)
     task_id = Keyword.get_lazy(opts, :task_id, &generate_task_id/0)
     worker_name = inspect(worker)
-    owner = Keyword.get(opts, :owner)
+    owner = __json_value__(Keyword.get(opts, :owner))
 
     attrs = %{
       task_id: task_id,
@@ -93,7 +102,7 @@ defmodule MCPOban do
         {:ok, task}
 
       {:ok, {:existing, %Task{owner: stored_owner, worker: ^worker_name} = task}} ->
-        if same_owner?(stored_owner, owner), do: {:ok, task}, else: {:error, :already_exists}
+        if stored_owner == owner, do: {:ok, task}, else: {:error, :already_exists}
 
       {:ok, {:existing, %Task{}}} ->
         {:error, :already_exists}
@@ -103,14 +112,16 @@ defmodule MCPOban do
     end
   end
 
-  defp same_owner?(stored, requested), do: stored == json_keys(requested)
+  @doc false
+  # The owner is stored as JSON. Converting it the same way first makes the
+  # stored and the requested owner comparable, for example atom values.
+  @spec __json_value__(term()) :: term()
+  def __json_value__(nil), do: nil
 
-  # The owner is stored as JSON, so atom keys come back as strings.
-  defp json_keys(map) when is_map(map),
-    do: Map.new(map, fn {k, v} -> {to_string(k), json_keys(v)} end)
-
-  defp json_keys(list) when is_list(list), do: Enum.map(list, &json_keys/1)
-  defp json_keys(value), do: value
+  def __json_value__(value) do
+    json = Application.get_env(:postgrex, :json_library, Jason)
+    value |> json.encode!() |> json.decode!()
+  end
 
   @doc """
   Returns the status of a task.
@@ -249,7 +260,7 @@ defmodule MCPOban do
   end
 
   defp poll(task_id, :infinity, interval, opts) do
-    case get(task_id, opts) do
+    case get_for_poll(task_id, opts) do
       {:ok, %Task{status: :working}} ->
         Process.sleep(interval)
         poll(task_id, :infinity, interval, opts)
@@ -260,7 +271,7 @@ defmodule MCPOban do
   end
 
   defp poll(task_id, deadline, interval, opts) do
-    case get(task_id, opts) do
+    case get_for_poll(task_id, opts) do
       {:ok, %Task{status: :working}} ->
         remaining = deadline - System.monotonic_time(:millisecond)
 
@@ -274,6 +285,13 @@ defmodule MCPOban do
       result ->
         result
     end
+  end
+
+  # A short database outage must not end a long wait: the job keeps running.
+  defp get_for_poll(task_id, opts) do
+    get(task_id, opts)
+  rescue
+    DBConnection.ConnectionError -> {:ok, %Task{status: :working}}
   end
 
   defp finish(task_id, status, changes, opts) do
@@ -317,29 +335,32 @@ defmodule MCPOban do
 
   defp final_state(nil), do: {:cancelled, []}
 
-  defp final_state(%Oban.Job{state: state} = job) do
+  defp final_state(
+         %Oban.Job{state: state, completed_at: completed_at, discarded_at: discarded_at} = job
+       ) do
     case Status.from_oban_state(state) do
       :working -> :working
-      :completed -> if result_pending?(job), do: :working, else: {:completed, []}
-      :failed -> {:failed, error: last_error(job)}
+      :completed -> if pending?(completed_at), do: :working, else: {:completed, []}
+      :failed -> if pending?(discarded_at), do: :working, else: {:failed, error: last_error(job)}
       status -> {status, []}
     end
   end
 
-  # Oban marks the job completed before the telemetry event saves the result.
-  # Repairing the task in this window would lose the result.
-  defp result_pending?(%Oban.Job{completed_at: completed_at}) do
-    grace = Application.get_env(:mcp_oban, :result_grace_period, @result_grace_period)
+  # Oban saves the final job state before the telemetry event saves the result
+  # or the worker's error message. Repairing the task in this window would lose
+  # them.
+  defp pending?(nil), do: false
 
-    is_nil(completed_at) or
-      DateTime.diff(DateTime.utc_now(), completed_at, :millisecond) < grace
+  defp pending?(finished_at) do
+    grace = Application.get_env(:mcp_oban, :result_grace_period, @result_grace_period)
+    DateTime.diff(DateTime.utc_now(), finished_at, :millisecond) < grace
   end
 
-  defp last_error(%Oban.Job{errors: []}), do: nil
+  defp last_error(%Oban.Job{errors: []}), do: Status.failed_error(nil)
 
   defp last_error(%Oban.Job{errors: errors}) do
-    %{"error" => message} = Enum.max_by(errors, &Map.get(&1, "attempt", 0))
-    %{"message" => message}
+    %{"error" => details} = Enum.max_by(errors, &Map.get(&1, "attempt", 0))
+    Status.failed_error(details)
   end
 
   defp cancel_job(_conf, %Task{oban_job_id: nil}, _kill), do: :ok

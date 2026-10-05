@@ -89,6 +89,10 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       * `:ttl` and `:poll_interval`: in milliseconds, sent to the client.
       * `:wait_timeout`: for clients without tasks, the maximum wait in
         milliseconds. The default is 9000.
+      * `:interval`: for clients without tasks, the time between two status
+        checks in milliseconds. The default is 100.
+
+    A failed task sends clients only the error `"message"`, see `MCPOban`.
 
     ## Limits
 
@@ -272,7 +276,9 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
 
       with {:ok, %Task{task_id: task_id}} <-
              MCPOban.enqueue(worker, arguments, enqueue_opts ++ oban_opts) do
-        case MCPOban.await(task_id, [timeout: timeout] ++ oban_opts) do
+        wait_opts = [timeout: timeout, interval: Keyword.get(opts, :interval, 100)]
+
+        case MCPOban.await(task_id, wait_opts ++ oban_opts) do
           {:ok, task} ->
             tool_result(task)
 

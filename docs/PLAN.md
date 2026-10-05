@@ -147,3 +147,24 @@ Still open (one reviewer each, confirmed by research): ExMCP adds `_request_id`/
 `MCPOban.FastestMCP.add_tools/3` adds one FastestMCP tool per worker. The tool handler inserts the job and waits for it (`MCPOban.await/2`, `:infinity` for background tasks). FastestMCP owns the MCP task, supports Tasks v1 and v2, and handles clients without tasks. On `tasks/cancel`, FastestMCP kills the tool process; a watcher process then calls `MCPOban.cancel/2`. The tool rules moved to `MCPOban.ToolSpec` and are shared with the ExMCP adapter. Checked with the MCP Inspector over HTTP (`examples/report_server/serve_fastest.exs`).
 
 Limit: FastestMCP tasks are in memory, so they do not survive a restart, although the Oban job and the MCPOban task do.
+
+## Release review (2026-10-05)
+
+Consensus review of the whole project (3 reviewers). Fixed:
+- Clients get only a safe error message ("The task failed." or a worker-chosen `{:error, %{"message" => ...}}`). The details stay in the task row (`"details"`).
+- `:interval` option for both adapters; FastestMCP background waits poll every 1000 ms. Polling survives `DBConnection.ConnectionError`.
+- `fastest_mcp` pinned to `~> 0.3.2`. PostgreSQL-only documented.
+- The NUL check looks for real NUL bytes. Struct results are wrapped in `%{"value" => ...}` (a struct used to make the task row unreadable).
+- The owner is normalized through JSON before it is stored and compared.
+- The example runs the Cleaner in the `reports` queue. The migration is safe to run twice.
+- FastestMCP watcher: only a real `tasks/cancel` cancels the job (decision: on server stop or disconnect, the job finishes). A missing task gives an error result.
+
+Not done: Hex package metadata and license (publishing postponed). Open single-reviewer findings: the ExMCP fallback ignores `notifications/cancelled`; `"content"` lists are not checked for block shape; the migration has no version; no tests for an Oban prefix, real queues, and the snooze branch.
+
+Second review of these fixes (3 reviewers), all fixed:
+- An exception struct as the error reason (`{:error, %RuntimeError{}}`) no longer sets the client message; only plain maps can choose it.
+- The NUL check runs on the decoded JSON, so it also covers structs.
+- Discarded jobs get the same grace period as completed jobs, so a status read cannot drop the worker's chosen message. After the grace period, a repair uses the fixed message.
+- The ExMCP store converts owners through JSON, like `enqueue/3`.
+- The FastestMCP watcher also catches exits (server stop).
+- A result that cannot be saved as JSON keeps the reason in `"details"`.

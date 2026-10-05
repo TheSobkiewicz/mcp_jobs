@@ -29,7 +29,7 @@ defmodule MCPOban.MixProject do
       {:ecto_sql, "~> 3.14"},
       {:telemetry, "~> 1.4"},
       {:ex_mcp, "~> 1.5", optional: true},
-      {:fastest_mcp, "~> 0.3", optional: true},
+      {:fastest_mcp, "~> 0.3.2", optional: true},
       {:postgrex, "~> 0.22", only: [:dev, :test]},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]

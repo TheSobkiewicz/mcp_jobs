@@ -30,6 +30,7 @@ defmodule MCPOban.Telemetry do
 
   require Logger
 
+  alias MCPOban.Status
   alias MCPOban.Task
 
   @handler_id "mcp_oban-job-handler"
@@ -116,7 +117,14 @@ defmodule MCPOban.Telemetry do
 
       {:error, reason} ->
         Logger.error("[MCPOban] the result of task #{task_id} is not valid JSON: #{reason}")
-        error = %{"message" => "The result could not be saved as JSON."}
+
+        error =
+          Map.put(
+            Status.failed_error(reason),
+            "message",
+            "The result could not be saved as JSON."
+          )
+
         MCPOban.transition(conf, task_id, :failed, error: error)
     end
   end
@@ -127,20 +135,40 @@ defmodule MCPOban.Telemetry do
 
   defp storable(result) do
     json = Application.get_env(:postgrex, :json_library, Jason)
+    decoded = result |> json.encode!() |> json.decode!()
 
-    if String.contains?(json.encode!(result), "\\u0000"),
-      do: {:error, "contains a NUL character"},
-      else: :ok
+    if nul?(decoded), do: {:error, "contains a NUL character"}, else: :ok
   rescue
     exception -> {:error, inspect(exception.__struct__)}
   end
 
-  defp result(%{result: {:ok, result}}) when is_map(result), do: result
+  defp nul?(value) when is_binary(value), do: String.contains?(value, <<0>>)
+  defp nul?(value) when is_list(value), do: Enum.any?(value, &nul?/1)
+  defp nul?(value) when is_map(value), do: Enum.any?(value, fn {k, v} -> nul?(k) or nul?(v) end)
+  defp nul?(_value), do: false
+
+  defp result(%{result: {:ok, result}}) when is_map(result) and not is_struct(result),
+    do: result
+
   defp result(%{result: {:ok, result}}), do: %{"value" => result}
   defp result(%{}), do: nil
 
-  defp error(%{error: %{__exception__: true} = exception}),
-    do: %{"message" => Exception.message(exception)}
+  defp error(meta),
+    do: Map.put(Status.failed_error(details(meta)), "message", client_message(meta))
 
-  defp error(%{result: result}), do: %{"message" => inspect(result)}
+  # A worker chooses the message that MCP clients see by returning
+  # `{:error, %{"message" => ...}}`. Other errors, also exception structs, can
+  # hold internal data, so clients only get a fixed message.
+  defp client_message(%{result: {kind, %{"message" => message} = reason}})
+       when kind in [:error, :discard] and is_binary(message) and not is_struct(reason),
+       do: message
+
+  defp client_message(%{result: {kind, %{message: message} = reason}})
+       when kind in [:error, :discard] and is_binary(message) and not is_struct(reason),
+       do: message
+
+  defp client_message(_meta), do: Status.failed_message()
+
+  defp details(%{error: %{__exception__: true} = exception}), do: Exception.message(exception)
+  defp details(%{result: result}), do: inspect(result)
 end

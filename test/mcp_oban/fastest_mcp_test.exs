@@ -86,6 +86,19 @@ defmodule MCPOban.FastestMCPTest do
     assert %Oban.Job{state: "cancelled"} = Repo.get(Oban.Job, job_id)
   end
 
+  @tag :unsandboxed
+  test "stopping the FastestMCP server does not cancel the job", %{name: name} do
+    %FastestMCP.BackgroundTask{task_id: task_id} =
+      FastestMCP.call_tool(name, "generate_report", %{"value" => 9}, task: true)
+
+    %Task{oban_job_id: job_id} = eventually(fn -> Repo.get_by(Task, task_id: task_id) end)
+    FastestMCP.stop_server(name)
+    Process.sleep(200)
+
+    assert %Task{status: :working} = Repo.get_by(Task, task_id: task_id)
+    assert %Oban.Job{state: "available"} = Repo.get(Oban.Job, job_id)
+  end
+
   test "a failed job returns an error result", %{name: name} do
     stop_jobs = run_jobs_in_background()
 
@@ -93,7 +106,7 @@ defmodule MCPOban.FastestMCPTest do
              FastestMCP.call_tool(name, "failing_report", %{})
 
     stop_jobs.()
-    assert text =~ "boom"
+    assert text == "The task failed."
   end
 
   test "a job that does not finish in time is cancelled", %{name: name} do

@@ -111,9 +111,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     end
 
     @doc false
-    def normalize_owner(owner) do
-      Map.new(owner, fn {key, value} -> {to_string(key), value} end)
-    end
+    def normalize_owner(owner), do: MCPOban.__json_value__(owner)
 
     defp oban_opts(opts), do: Keyword.take(opts, [:oban])
 
@@ -154,9 +152,6 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     end
 
     def call_tool_result(%Task{}), do: nil
-
-    defp rpc_error(%Task{status: :failed, error: %{"code" => _, "message" => _} = error}),
-      do: error
 
     defp rpc_error(%Task{status: :failed, error: error}) do
       %{"code" => @internal_error, "message" => MCPOban.Status.error_message(error)}

@@ -30,9 +30,13 @@ if Code.ensure_loaded?(FastestMCP) do
 
     A failed or cancelled job returns a tool result with `isError: true`.
 
-    When FastestMCP cancels a task (`tasks/cancel`, or the task expires), it
-    stops the waiting tool process. MCPOban then cancels the task and its job, as
-    `MCPOban.cancel/2` describes.
+    When a client cancels a FastestMCP task (`tasks/cancel`), FastestMCP stops
+    the waiting tool process. MCPOban then cancels the task and its job, as
+    `MCPOban.cancel/2` describes. When the tool process stops for another reason
+    (the server stops, the client disconnects, or the wait fails), the job
+    keeps running and the MCPOban task finishes as usual.
+
+    A failed task sends clients only the error `"message"`, see `MCPOban`.
 
     ## Options
 
@@ -41,6 +45,8 @@ if Code.ensure_loaded?(FastestMCP) do
       * `:kill`: when `true`, a cancel also kills a running job.
       * `:wait_timeout`: for clients without tasks, the maximum wait in
         milliseconds. The default is 9000.
+      * `:interval`: the time between two status checks in milliseconds. The
+        default is 1000 for tasks and 100 for clients without tasks.
       * `:task`: the FastestMCP task option of the tools. The default is
         `[mode: :optional]`.
 
@@ -91,12 +97,15 @@ if Code.ensure_loaded?(FastestMCP) do
 
       case MCPOban.enqueue(worker, arguments, enqueue_opts) do
         {:ok, %Task{task_id: task_id}} ->
-          cancel_when_stopped(self(), task_id, cancel_opts)
-          timeout = wait_timeout(ctx, opts)
+          if FastestMCP.Context.background_task?(ctx),
+            do: cancel_on_task_cancel(self(), ctx, task_id, cancel_opts)
 
-          case MCPOban.await(task_id, [timeout: timeout] ++ oban_opts) do
+          [timeout: timeout, interval: _interval] = wait_opts = wait_opts(ctx, opts)
+
+          case MCPOban.await(task_id, wait_opts ++ oban_opts) do
             {:ok, task} -> tool_result(task)
             {:error, :timeout} -> timed_out(task_id, timeout, cancel_opts)
+            {:error, :not_found} -> tool_error("The task was not found.")
           end
 
         {:error, :job_conflict} ->
@@ -114,23 +123,39 @@ if Code.ensure_loaded?(FastestMCP) do
       end
     end
 
-    defp wait_timeout(ctx, opts) do
+    defp wait_opts(ctx, opts) do
       if FastestMCP.Context.background_task?(ctx),
-        do: :infinity,
-        else: Keyword.get(opts, :wait_timeout, @default_wait_timeout)
+        do: [timeout: :infinity, interval: Keyword.get(opts, :interval, 1_000)],
+        else: [
+          timeout: Keyword.get(opts, :wait_timeout, @default_wait_timeout),
+          interval: Keyword.get(opts, :interval, 100)
+        ]
     end
 
-    # FastestMCP stops the tool process to cancel a task. The process cannot
-    # react to that itself, so a separate process cancels the MCPOban task.
-    defp cancel_when_stopped(tool_pid, task_id, cancel_opts) do
+    # FastestMCP kills the tool process to cancel a task, and also when the
+    # server stops. Only a real cancel cancels the job: FastestMCP marks the task
+    # cancelled before the kill. The killed process cannot react, so a separate
+    # process checks the FastestMCP task.
+    defp cancel_on_task_cancel(tool_pid, ctx, task_id, cancel_opts) do
       spawn(fn ->
         ref = Process.monitor(tool_pid)
 
         receive do
-          {:DOWN, ^ref, :process, ^tool_pid, :normal} -> :ok
-          {:DOWN, ^ref, :process, ^tool_pid, _reason} -> MCPOban.cancel(task_id, cancel_opts)
+          {:DOWN, ^ref, :process, ^tool_pid, :normal} ->
+            :ok
+
+          {:DOWN, ^ref, :process, ^tool_pid, _reason} ->
+            if fastest_task_cancelled?(ctx, task_id), do: MCPOban.cancel(task_id, cancel_opts)
         end
       end)
+    end
+
+    defp fastest_task_cancelled?(%FastestMCP.Context{server_name: server_name} = ctx, task_id) do
+      match?(%{status: :cancelled}, FastestMCP.fetch_task(server_name, task_id, context: ctx))
+    rescue
+      _task_gone -> false
+    catch
+      :exit, _server_stopped -> false
     end
 
     defp timed_out(task_id, timeout, cancel_opts) do

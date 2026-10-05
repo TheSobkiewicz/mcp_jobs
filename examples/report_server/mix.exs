@@ -22,7 +22,7 @@ defmodule ReportServer.MixProject do
     [
       {:mcp_oban, path: "../.."},
       {:ex_mcp, "~> 1.5"},
-      {:fastest_mcp, "~> 0.3"},
+      {:fastest_mcp, "~> 0.3.2"},
       {:oban, "~> 2.24"},
       {:postgrex, "~> 0.22"}
     ]
