@@ -10,7 +10,11 @@ defmodule MCPJobs.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: "Run MCP tool calls as Oban jobs, with MCP Tasks that follow the job state.",
-      package: [licenses: ["MIT"]],
+      source_url: "https://github.com/TheSobkiewicz/mcp_jobs",
+      package: [
+        licenses: ["MIT"],
+        links: %{"GitHub" => "https://github.com/TheSobkiewicz/mcp_jobs"}
+      ],
       docs: [
         main: "readme",
         extras: [

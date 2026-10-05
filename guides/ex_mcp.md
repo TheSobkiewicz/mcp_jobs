@@ -99,6 +99,8 @@ end
 
 Over HTTP, also give the server name to the plug: `server_info: MyApp.MCPServer.server_info()`. Clients with the current protocol (MCP `2026-07-28`, for example Claude Code) send no `initialize`, and ExMCP takes their server name from the plug options. This option also loads your server module when the plug starts. Without it, in development the first request after a start can get no tools, because ExMCP does not load the module before it reads its capabilities. `mix mcp_jobs.install` adds this option.
 
+ExMCP rejects requests with an `Origin` header that is not in `:allowed_origins` (403 "Origin not allowed"). Claude Code and the MCP Inspector CLI send no `Origin`. Browser clients, for example the Inspector web page on port 6274, do. Add their origins to the plug options: `allowed_origins: ["http://localhost:6274"]`.
+
 To add a tool that is not an Oban job, define `handle_call_tool/3` and call `super` for the other tools:
 
 ```elixir

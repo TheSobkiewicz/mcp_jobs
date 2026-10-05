@@ -27,14 +27,20 @@ With MCPJobs, the tool call gives back an MCP task at once, and Oban does the wo
 
 ## Usage
 
-Write a plain Oban worker. The `@moduledoc` becomes the tool description:
+Write a plain Oban worker. The `@moduledoc` becomes the tool description, and the input schema tells the AI client which arguments to send:
 
 ```elixir
 defmodule MyApp.Workers.GenerateReport do
   @moduledoc "Generates a report in the background."
 
   use Oban.Worker, queue: :reports, max_attempts: 3
-  use MCPJobs.Tool
+
+  use MCPJobs.Tool,
+    input_schema: %{
+      "type" => "object",
+      "properties" => %{"report_id" => %{"type" => "integer"}},
+      "required" => ["report_id"]
+    }
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"report_id" => report_id}} = job) do
@@ -53,7 +59,7 @@ defmodule MyApp.MCPServer do
 end
 ```
 
-The client calls `generate_report` and gets a task ID at once. It then reads the task with `tasks/get`, or listens for `notifications/tasks`, until the task is done:
+`mix mcp_jobs.install` prints how to serve it over HTTP. The client calls `generate_report` and gets a task ID at once. It then reads the task with `tasks/get`, or listens for `notifications/tasks`, until the task is done:
 
 ```json
 {"taskId": "...", "status": "working", "statusMessage": "Loading data (1/2)"}
@@ -70,12 +76,12 @@ The client calls `generate_report` and gets a task ID at once. It then reads the
 
 ## Installation
 
-MCPJobs needs Oban with PostgreSQL.
+MCPJobs needs Oban with PostgreSQL. It is not on Hex yet, so install it from GitHub.
 
 ```elixir
 def deps do
   [
-    {:mcp_jobs, "~> 0.1"},
+    {:mcp_jobs, github: "TheSobkiewicz/mcp_jobs"},
     # Optional, for the ExMCP adapter:
     {:ex_mcp, "~> 1.5"}
   ]

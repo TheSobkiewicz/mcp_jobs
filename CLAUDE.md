@@ -14,7 +14,6 @@ A small Elixir library that connects MCP Tasks to Oban jobs. An MCP tool puts it
 ## Toolchain
 
 - Versions are managed with asdf through `.tool-versions` in the project root: Erlang 27.3.4, Elixir 1.19.5-otp-27.
-- The global `~/.tool-versions` points to Erlang 27.1.1, which is not installed. Always run commands from the project root so the local pin applies.
 
 ## Commands
 
