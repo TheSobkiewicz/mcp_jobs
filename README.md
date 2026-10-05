@@ -6,7 +6,7 @@ An MCP client calls a tool. The server gives back a task ID at once, and Oban do
 
 | Oban job state                                     | MCP task status |
 | -------------------------------------------------- | --------------- |
-| `available`, `scheduled`, `executing`, `retryable` | `working`       |
+| `available`, `scheduled`, `executing`, `retryable`, `suspended` | `working` |
 | `completed`                                        | `completed`     |
 | `discarded` (all attempts failed)                  | `failed`        |
 | `cancelled`, or the job is deleted                 | `cancelled`     |
@@ -80,7 +80,13 @@ The return value of `perform/1` becomes the task result:
 
 The result is stored as JSON, so atom keys come back as strings. The result must be JSON-safe: for example, no tuples or PIDs.
 
-> **Note:** Oban marks the job `completed` first, and then MCPO saves the result from the Oban telemetry event. If the node stops between these two steps, the task becomes `completed` with no result.
+> **Note:** Oban marks the job `completed` first, and then MCPO saves the result from the Oban telemetry event. Between these two steps the task stays `working`. If the result is not saved within 5 seconds (for example, the node stopped), the task becomes `completed` with no result. Change the time with `config :mcpo, result_grace_period: 5_000`.
+>
+> A result that cannot be saved as JSON makes the task `failed`.
+>
+> When Oban deletes a job before MCPO sees its final state (for example, the Pruner removed it), the task becomes `cancelled`. Keep the Pruner `max_age` longer than the time clients take to read a result.
+>
+> Workers with Oban `unique:` options: a duplicate job is rejected with `{:error, :job_conflict}`. Two tasks never share one job. With Oban's default unique states, a job that has already completed within the unique period also counts as a duplicate.
 
 ## Use with ExMCP
 
@@ -299,6 +305,8 @@ config :my_app, Oban,
 
 config :mcpo, task_retention: :timer.hours(24)
 ```
+
+The Cleaner job goes to the `:default` queue. If your app does not run that queue, set a queue that it runs, for example `{"@hourly", MCPO.Cleaner, queue: :maintenance}`. Otherwise old tasks are never deleted.
 
 ## Example
 

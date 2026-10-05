@@ -111,3 +111,26 @@ Test with the MCP Inspector (TypeScript SDK 1.29, latest protocol `2025-11-25`) 
 ## Oban Pro args_schema (2026-10-05)
 
 The spec excludes Oban Pro features from the MVP. On user request, MCPO now reads the `args_schema` of an Oban Pro worker (`__args_schema__/0`, undocumented by Pro, same format in Pro 1.5 to 1.7.10) and builds the input schema from it. There is no dependency on Oban Pro. Tests use a fake worker with the same format. Checked once with real Oban Pro 1.7.10: MCPO and Pro accept and reject the same arguments.
+
+## Review (2026-10-05)
+
+Three independent reviewers. Fixed the findings that at least two reported:
+- A read between the Oban ack and the telemetry event lost the result. Now a completed job keeps the task `working` for a grace period (`result_grace_period`, 5 s).
+- Unique workers linked two tasks to one job. Now `enqueue/3` returns `{:error, :job_conflict}`.
+- A result that is not JSON-safe completed the task with no result. Now the task fails.
+- The fallback timeout ignored the cancel result and the `:kill` option.
+- The `suspended` job state crashed `get/2` and was not cancelled.
+- The Cleaner queue and the deleted-job mapping are now documented.
+
+Reported by one reviewer only, not changed: `enqueue/3` returns an existing task of another owner; a running job of a cancelled task can retry; ExMCP stdio adds `_request_id`/`_meta` to tool arguments; a result with a non-list `"content"` key is passed on as is.
+
+## Second review of the fixes (2026-10-05)
+
+The consensus-review skill (two runs, same results) found problems in the first review fixes. Fixed:
+- The `id: nil` conflict clause broke Oban `testing: :inline`. Removed; `conflict?: true` covers real conflicts.
+- The rescue for non-JSON results also caught database errors and failed the task for good. The result is now checked with the Postgrex JSON library first; other errors go to the old safety net.
+- The error for a non-JSON result showed the whole value to the client. It is now a fixed message; the server log has the exception type only.
+- The conflict message now says "A job with the same arguments already exists." Completed jobs within the unique period also conflict; documented.
+- Tests for the fallback branches: kill on timeout, a task that finished before the cancel, the conflict message.
+
+Still open (one reviewer each, confirmed by research): ExMCP adds `_request_id`/`_meta` to tool arguments, which also stops Oban `unique:` from finding duplicate calls; `enqueue/3` returns another owner's task for an existing `task_id`; a cancelled task's running job can retry; a non-list `"content"` result is passed on unchanged.

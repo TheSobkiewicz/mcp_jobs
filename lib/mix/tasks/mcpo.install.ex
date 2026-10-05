@@ -132,6 +132,9 @@ defmodule Mix.Tasks.Mcpo.Install do
            config :#{app}, Oban,
              plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPO.Cleaner}]}]
 
+       The Cleaner uses the :default queue. If your app does not run it, set a
+       queue: {"@hourly", MCPO.Cleaner, queue: :maintenance}
+
        If your Oban instance is not named Oban, also add:
 
            config :mcpo, oban: MyApp.Oban

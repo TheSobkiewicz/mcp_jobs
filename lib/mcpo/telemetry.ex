@@ -23,7 +23,8 @@ defmodule MCPO.Telemetry do
 
   On `:success`, the return value of `perform/1` becomes the task result:
   `{:ok, map}` saves the map, `{:ok, value}` saves `%{"value" => value}`, and
-  `:ok` saves no result.
+  `:ok` saves no result. A result that cannot be saved as JSON makes the task
+  `:failed`.
   """
 
   require Logger
@@ -52,7 +53,7 @@ defmodule MCPO.Telemetry do
       )
       when state in [:success, :discard, :cancelled] do
     case state do
-      :success -> MCPO.transition(conf, task_id, :completed, result: result(meta))
+      :success -> complete(conf, task_id, result(meta))
       :discard -> MCPO.transition(conf, task_id, :failed, error: error(meta))
       :cancelled -> MCPO.transition(conf, task_id, :cancelled, [])
     end
@@ -84,6 +85,32 @@ defmodule MCPO.Telemetry do
 
   defp metadata(%Task{task_id: task_id, oban_job_id: job_id, worker: worker}) do
     %{task_id: task_id, oban_job_id: job_id, worker: worker}
+  end
+
+  defp complete(conf, task_id, result) do
+    case storable(result) do
+      :ok ->
+        MCPO.transition(conf, task_id, :completed, result: result)
+
+      {:error, reason} ->
+        Logger.error("[MCPO] the result of task #{task_id} is not valid JSON: #{reason}")
+        error = %{"message" => "The result could not be saved as JSON."}
+        MCPO.transition(conf, task_id, :failed, error: error)
+    end
+  end
+
+  # Checks the result with the JSON library that Postgrex uses for the column.
+  # PostgreSQL also rejects the NUL character in jsonb.
+  defp storable(nil), do: :ok
+
+  defp storable(result) do
+    json = Application.get_env(:postgrex, :json_library, Jason)
+
+    if String.contains?(json.encode!(result), "\\u0000"),
+      do: {:error, "contains a NUL character"},
+      else: :ok
+  rescue
+    exception -> {:error, inspect(exception.__struct__)}
   end
 
   defp result(%{result: {:ok, result}}) when is_map(result), do: result

@@ -293,23 +293,44 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       with {:ok, %Task{task_id: task_id}} <-
              MCPO.enqueue(worker, arguments, enqueue_opts ++ oban_opts) do
         case MCPO.await(task_id, [timeout: timeout] ++ oban_opts) do
-          {:ok, %Task{status: :completed} = task} ->
-            Store.call_tool_result(task)
-
-          {:ok, %Task{status: :failed, error: error}} ->
-            tool_error(Store.error_message(error))
-
-          {:ok, %Task{status: :cancelled}} ->
-            tool_error("The task was cancelled.")
+          {:ok, task} ->
+            tool_result(task)
 
           {:error, :timeout} ->
-            MCPO.cancel(task_id, oban_opts)
-            tool_error("The task did not finish in #{timeout} ms and was cancelled.")
+            __timed_out__(task_id, timeout, opts)
         end
       else
+        {:error, :job_conflict} -> tool_error("A job with the same arguments already exists.")
         {:error, _reason} -> tool_error("The task could not be started.")
       end
     end
+
+    @doc false
+    @spec __timed_out__(String.t(), non_neg_integer(), keyword()) :: map()
+    def __timed_out__(task_id, timeout, opts) do
+      oban_opts = Keyword.take(opts, [:oban])
+
+      case MCPO.cancel(task_id, Keyword.take(opts, [:oban, :kill])) do
+        {:ok, _task} ->
+          tool_error("The task did not finish in #{timeout} ms and was cancelled.")
+
+        {:error, :terminal} ->
+          case MCPO.get(task_id, oban_opts) do
+            {:ok, task} -> tool_result(task)
+            {:error, :not_found} -> tool_error("The task was not found.")
+          end
+
+        {:error, :not_found} ->
+          tool_error("The task was not found.")
+      end
+    end
+
+    defp tool_result(%Task{status: :completed} = task), do: Store.call_tool_result(task)
+
+    defp tool_result(%Task{status: :failed, error: error}),
+      do: tool_error(Store.error_message(error))
+
+    defp tool_result(%Task{status: :cancelled}), do: tool_error("The task was cancelled.")
 
     defp tool_error(message) do
       %{"content" => [%{"type" => "text", "text" => message}], "isError" => true}

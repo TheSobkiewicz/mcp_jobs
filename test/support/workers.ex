@@ -123,3 +123,27 @@ defmodule MCPO.Test.ProWorker do
   @impl Oban.Worker
   def perform(%Oban.Job{}), do: :ok
 end
+
+defmodule MCPO.Test.UniqueWorker do
+  @moduledoc false
+  use Oban.Worker, unique: [period: 60]
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: :ok
+end
+
+defmodule MCPO.Test.TupleWorker do
+  @moduledoc false
+  use Oban.Worker
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: {:ok, {:not, :json}}
+end
+
+defmodule MCPO.Test.NulWorker do
+  @moduledoc false
+  use Oban.Worker
+
+  @impl Oban.Worker
+  def perform(%Oban.Job{}), do: {:ok, %{"text" => "a\u0000b"}}
+end

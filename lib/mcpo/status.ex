@@ -4,7 +4,7 @@ defmodule MCPO.Status do
 
   | Oban state                                            | MCP status   |
   | ----------------------------------------------------- | ------------ |
-  | `available`, `scheduled`, `executing`, `retryable`    | `:working`   |
+  | `available`, `scheduled`, `executing`, `retryable`, `suspended` | `:working` |
   | `completed`                                           | `:completed` |
   | `discarded`                                           | `:failed`    |
   | `cancelled`, or the job is deleted                    | `:cancelled` |
@@ -12,7 +12,7 @@ defmodule MCPO.Status do
   A `retryable` job is still `:working`. A retry never makes a task fail.
   """
 
-  @working_states ~w(available scheduled executing retryable)
+  @working_states ~w(available scheduled executing retryable suspended)
 
   @doc "Returns the MCP status for an Oban job state. `nil` means the job is deleted."
   @spec from_oban_state(String.t() | nil) :: MCPO.Task.status()

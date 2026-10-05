@@ -10,6 +10,10 @@ defmodule MCPO.Cleaner do
 
       config :my_app, Oban,
         plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPO.Cleaner}]}]
+
+  The job goes to the `:default` queue. If your app does not run that queue, set
+  a queue that it runs: `{"@hourly", MCPO.Cleaner, queue: :maintenance}`.
+  Otherwise the job never runs, and old tasks are never deleted.
   """
 
   use Oban.Worker, queue: :default, unique: [period: 60]

@@ -10,13 +10,19 @@ defmodule MCPO.Test.MCPServer do
       MCPO.Test.PlainWorker,
       MCPO.Test.DocumentedWorker,
       {MCPO.Test.DocumentedWorker, name: "summary_override", description: "Override."},
-      MCPO.Test.HiddenDocWorker
+      MCPO.Test.HiddenDocWorker,
+      {MCPO.Test.UniqueWorker, name: "unique_report"}
     ]
 
   @impl ExMCP.Server.Handler
   def handle_call_tool("slow_report", arguments, state) do
     opts = Keyword.put(__task_store_options__(), :wait_timeout, 200)
     MCPO.ExMCP.create_task("slow_report", MCPO.Test.SuccessWorker, arguments, state, opts)
+  end
+
+  def handle_call_tool("slow_kill_report", arguments, state) do
+    opts = Keyword.merge(__task_store_options__(), wait_timeout: 200, kill: true)
+    MCPO.ExMCP.create_task("slow_kill_report", MCPO.Test.SuccessWorker, arguments, state, opts)
   end
 
   def handle_call_tool(name, arguments, state), do: super(name, arguments, state)

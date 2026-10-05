@@ -245,6 +245,114 @@ defmodule MCPOTest do
     end
   end
 
+  describe "review fixes" do
+    test "a read between the job ack and the telemetry event does not lose the result" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPO.enqueue(SuccessWorker, %{value: 1})
+
+      Repo.update_all(where(Oban.Job, id: ^job_id),
+        set: [state: "completed", completed_at: DateTime.utc_now()]
+      )
+
+      assert {:ok, %{status: :working}} = MCPO.status(task_id)
+
+      job = Repo.get(Oban.Job, job_id)
+
+      MCPO.Telemetry.handle_event(
+        [:oban, :job, :stop],
+        %{},
+        %{job: job, state: :success, conf: Oban.config(), result: {:ok, %{"value" => 1}}},
+        nil
+      )
+
+      assert {:ok, %{status: :completed, result: %{"value" => 1}}} = MCPO.status(task_id)
+    end
+
+    test "a completed job without a saved result completes the task after the grace period" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPO.enqueue(SuccessWorker, %{value: 1})
+
+      Repo.update_all(where(Oban.Job, id: ^job_id),
+        set: [state: "completed", completed_at: DateTime.add(DateTime.utc_now(), -10, :second)]
+      )
+
+      assert {:ok, %{status: :completed, result: nil}} = MCPO.status(task_id)
+    end
+
+    test "a duplicate unique job is rejected and no task is saved" do
+      assert {:ok, %Task{}} = MCPO.enqueue(MCPO.Test.UniqueWorker, %{q: 1}, owner: %{"u" => 1})
+
+      assert {:error, :job_conflict} =
+               MCPO.enqueue(MCPO.Test.UniqueWorker, %{q: 1}, owner: %{"u" => 2})
+
+      assert Repo.aggregate(Task, :count) == 1
+      assert Repo.aggregate(Oban.Job, :count) == 1
+    end
+
+    test "a result that cannot be saved as JSON fails the task" do
+      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(MCPO.Test.TupleWorker, %{})
+
+      drain()
+
+      assert %Task{status: :failed, error: %{"message" => message}} =
+               Repo.get_by(Task, task_id: task_id)
+
+      assert message == "The result could not be saved as JSON."
+    end
+
+    test "a result with a NUL character fails the task" do
+      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(MCPO.Test.NulWorker, %{})
+
+      drain()
+
+      assert %Task{
+               status: :failed,
+               error: %{"message" => "The result could not be saved as JSON."}
+             } =
+               Repo.get_by(Task, task_id: task_id)
+    end
+
+    test "a database error while saving the result leaves the task working" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPO.enqueue(SuccessWorker, %{value: 1})
+
+      conf = %{Oban.config() | repo: MCPO.Test.FlakyRepo}
+
+      MCPO.Telemetry.handle_event(
+        [:oban, :job, :stop],
+        %{},
+        %{
+          job: Repo.get(Oban.Job, job_id),
+          state: :success,
+          conf: conf,
+          result: {:ok, %{"v" => 1}}
+        },
+        nil
+      )
+
+      assert %Task{status: :working} = Repo.get_by(Task, task_id: task_id)
+    end
+
+    test "enqueue works with Oban in inline testing mode" do
+      start_supervised!({Oban, name: MCPO.Test.InlineOban, repo: Repo, testing: :inline})
+
+      assert {:ok, %Task{task_id: task_id}} =
+               MCPO.enqueue(SuccessWorker, %{value: 5}, oban: MCPO.Test.InlineOban)
+
+      assert {:ok, %{status: :completed, result: %{"value" => 5}}} =
+               MCPO.status(task_id, oban: MCPO.Test.InlineOban)
+    end
+
+    test "a suspended job is working and can be cancelled" do
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
+        MCPO.enqueue(SuccessWorker, %{value: 1}, job: [state: "suspended"])
+
+      assert {:ok, %{status: :working}} = MCPO.status(task_id)
+      assert {:ok, %Task{status: :cancelled}} = MCPO.cancel(task_id)
+      assert %Oban.Job{state: "cancelled"} = Repo.get(Oban.Job, job_id)
+    end
+  end
+
   describe "races" do
     test "a cancel after completion does nothing" do
       {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})

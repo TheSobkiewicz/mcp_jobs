@@ -44,7 +44,8 @@ defmodule MCPO.ExMCPToolsTest do
                  "name" => "summary_override",
                  "description" => "Override.",
                  "inputSchema" => %{"properties" => %{"text" => _}}
-               }
+               },
+               %{"name" => "unique_report"}
              ] = Enum.sort_by(tools, &Map.fetch!(&1, "name"))
     end
   end

@@ -14,9 +14,22 @@ defmodule MCPO do
     * `:ok`: the task becomes `:completed` with no result.
     * `{:error, reason}`: Oban retries the job and the task stays `:working`.
 
-  The result is stored as JSON, so atom keys come back as strings. Oban marks
-  the job completed before MCPO saves the result. If the node stops between
-  these two steps, the task becomes `:completed` with no result.
+  The result is stored as JSON, so atom keys come back as strings. A result
+  that cannot be stored as JSON makes the task `:failed`.
+
+  Oban marks the job completed before MCPO saves the result. Until the result
+  is saved, the task stays `:working`. If the result is not saved within 5
+  seconds (for example, the node stopped), the task becomes `:completed` with no
+  result. Change the time with `config :mcpo, result_grace_period: 5_000`.
+
+  When Oban deletes a job before MCPO sees its final state (for example, the
+  Pruner removed it), the task becomes `:cancelled`. Keep the Pruner `max_age`
+  longer than the time clients take to read a result.
+
+  A worker with Oban `unique:` options cannot share a job between tasks:
+  `enqueue/3` returns `{:error, :job_conflict}` for a duplicate job. With
+  Oban's default unique states, a job that has already completed within the
+  unique period also counts as a duplicate.
 
   MCPO does not implement the MCP protocol. An MCP server adapter translates
   these functions into MCP messages.
@@ -35,7 +48,8 @@ defmodule MCPO do
   alias MCPO.Task
   alias MCPO.Telemetry
 
-  @cancellable_states ~w(available scheduled retryable)
+  @cancellable_states ~w(available scheduled retryable suspended)
+  @result_grace_period 5_000
 
   @doc """
   Creates a task and inserts an Oban job for it in one transaction.
@@ -238,6 +252,7 @@ defmodule MCPO do
       |> Keyword.update(:meta, %{"mcp_task_id" => task_id}, &Map.put(&1, "mcp_task_id", task_id))
 
     case Oban.insert(name, worker.new(args, job_opts)) do
+      {:ok, %Oban.Job{conflict?: true}} -> Oban.Repo.rollback(conf, :job_conflict)
       {:ok, %Oban.Job{id: job_id}} -> Repository.put_job_id(conf, task_id, job_id)
       {:error, reason} -> Oban.Repo.rollback(conf, reason)
     end
@@ -261,9 +276,19 @@ defmodule MCPO do
   defp final_state(%Oban.Job{state: state} = job) do
     case Status.from_oban_state(state) do
       :working -> :working
+      :completed -> if result_pending?(job), do: :working, else: {:completed, []}
       :failed -> {:failed, error: last_error(job)}
       status -> {status, []}
     end
+  end
+
+  # Oban marks the job completed before the telemetry event saves the result.
+  # Repairing the task in this window would lose the result.
+  defp result_pending?(%Oban.Job{completed_at: completed_at}) do
+    grace = Application.get_env(:mcpo, :result_grace_period, @result_grace_period)
+
+    is_nil(completed_at) or
+      DateTime.diff(DateTime.utc_now(), completed_at, :millisecond) < grace
   end
 
   defp last_error(%Oban.Job{errors: []}), do: nil
