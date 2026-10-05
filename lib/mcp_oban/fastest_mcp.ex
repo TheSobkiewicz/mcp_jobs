@@ -1,5 +1,5 @@
 if Code.ensure_loaded?(FastestMCP) do
-  defmodule MCPO.FastestMCP do
+  defmodule MCPOban.FastestMCP do
     @moduledoc """
     Runs FastestMCP tool calls as Oban jobs.
 
@@ -7,13 +7,13 @@ if Code.ensure_loaded?(FastestMCP) do
 
         server =
           FastestMCP.server("reports")
-          |> MCPO.FastestMCP.add_tools([
+          |> MCPOban.FastestMCP.add_tools([
             MyApp.Workers.GenerateReport,
             {MyApp.Workers.SendEmail, description: "Sends an email."}
           ])
 
     The tool name, description and input schema follow the same rules as in
-    `MCPO.ExMCP`: the options in the list, then `use MCPO.Tool`, then the Oban
+    `MCPOban.ExMCP`: the options in the list, then `use MCPOban.Tool`, then the Oban
     Pro `args_schema`, then the defaults. FastestMCP checks the arguments against
     the input schema.
 
@@ -26,13 +26,13 @@ if Code.ensure_loaded?(FastestMCP) do
         extension) gets a FastestMCP task at once. The tool waits for the job in
         the background, without a time limit.
       * A client without tasks waits for the result. If the job does not finish
-        in `:wait_timeout`, MCPO cancels it and returns an error result.
+        in `:wait_timeout`, MCPOban cancels it and returns an error result.
 
     A failed or cancelled job returns a tool result with `isError: true`.
 
     When FastestMCP cancels a task (`tasks/cancel`, or the task expires), it
-    stops the waiting tool process. MCPO then cancels the task and its job, as
-    `MCPO.cancel/2` describes.
+    stops the waiting tool process. MCPOban then cancels the task and its job, as
+    `MCPOban.cancel/2` describes.
 
     ## Options
 
@@ -48,11 +48,11 @@ if Code.ensure_loaded?(FastestMCP) do
 
     FastestMCP keeps its tasks in memory by default. After a restart, a client
     cannot read a task that FastestMCP created before the restart, even though
-    the Oban job and the MCPO task still exist.
+    the Oban job and the MCPOban task still exist.
     """
 
     alias FastestMCP.Tools.Result
-    alias MCPO.Task
+    alias MCPOban.Task
 
     @default_wait_timeout 9_000
 
@@ -61,7 +61,7 @@ if Code.ensure_loaded?(FastestMCP) do
             FastestMCP.Server.t()
     def add_tools(server, tools, opts \\ []) do
       tools
-      |> MCPO.ToolSpec.build()
+      |> MCPOban.ToolSpec.build()
       |> Enum.reduce(server, &add_tool(&2, &1, opts))
     end
 
@@ -89,12 +89,12 @@ if Code.ensure_loaded?(FastestMCP) do
         [meta: %{"tool_name" => tool_name}, job: Keyword.get(opts, :job, [])] ++
           task_id_opts(ctx) ++ oban_opts
 
-      case MCPO.enqueue(worker, arguments, enqueue_opts) do
+      case MCPOban.enqueue(worker, arguments, enqueue_opts) do
         {:ok, %Task{task_id: task_id}} ->
           cancel_when_stopped(self(), task_id, cancel_opts)
           timeout = wait_timeout(ctx, opts)
 
-          case MCPO.await(task_id, [timeout: timeout] ++ oban_opts) do
+          case MCPOban.await(task_id, [timeout: timeout] ++ oban_opts) do
             {:ok, task} -> tool_result(task)
             {:error, :timeout} -> timed_out(task_id, timeout, cancel_opts)
           end
@@ -121,20 +121,20 @@ if Code.ensure_loaded?(FastestMCP) do
     end
 
     # FastestMCP stops the tool process to cancel a task. The process cannot
-    # react to that itself, so a separate process cancels the MCPO task.
+    # react to that itself, so a separate process cancels the MCPOban task.
     defp cancel_when_stopped(tool_pid, task_id, cancel_opts) do
       spawn(fn ->
         ref = Process.monitor(tool_pid)
 
         receive do
           {:DOWN, ^ref, :process, ^tool_pid, :normal} -> :ok
-          {:DOWN, ^ref, :process, ^tool_pid, _reason} -> MCPO.cancel(task_id, cancel_opts)
+          {:DOWN, ^ref, :process, ^tool_pid, _reason} -> MCPOban.cancel(task_id, cancel_opts)
         end
       end)
     end
 
     defp timed_out(task_id, timeout, cancel_opts) do
-      case MCPO.__cancel_after_timeout__(task_id, cancel_opts) do
+      case MCPOban.__cancel_after_timeout__(task_id, cancel_opts) do
         {:cancelled, _task} ->
           tool_error("The task did not finish in #{timeout} ms and was cancelled.")
 
@@ -163,7 +163,7 @@ if Code.ensure_loaded?(FastestMCP) do
       do: Result.new(nil, structured_content: result)
 
     defp tool_result(%Task{status: :failed, error: error}),
-      do: tool_error(MCPO.Status.error_message(error))
+      do: tool_error(MCPOban.Status.error_message(error))
 
     defp tool_result(%Task{status: :cancelled}), do: tool_error("The task was cancelled.")
 

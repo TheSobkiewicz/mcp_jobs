@@ -10,7 +10,7 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 - Keep the library small and simple. Do not repeat what Oban already does.
 - An Oban retry must not make the MCP task fail. The task fails only when Oban discards the job.
 - Use database constraints for idempotency and state transitions. Do not rely only on application checks.
-- Do not depend on Oban Pro. Only `MCPO.ArgsSchema` reads Oban Pro data (`__args_schema__/0`), with no compile-time dependency.
+- Do not depend on Oban Pro. Only `MCPOban.ArgsSchema` reads Oban Pro data (`__args_schema__/0`), with no compile-time dependency.
 - Keep to the MVP scope in the spec.
 
 ## Toolchain
@@ -24,7 +24,7 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 - `mix compile --warnings-as-errors`: compile
 - `mix test`: run all tests; `mix test path/to/file_test.exs:LINE` runs a single test
 - `mix format`: format the code. Run it before finishing any change.
-- `mix mcpo.install` (in a host app): creates the MCPO migration and an MCP server module.
+- `mix mcp_oban.install` (in a host app): creates the MCPOban migration and an MCP server module.
 
 ## Conventions
 
@@ -46,15 +46,15 @@ The full spec is in `docs/SPEC.md`. Read it before you design or change behavior
 
 The plan and its decisions are in `docs/PLAN.md`.
 
-- `MCPO`: public API (`enqueue/3`, `status/2`, `get/2`, `await/2`, `cancel/2`, `cancelled?/1`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
-- `MCPO.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
-- Workers are plain `Oban.Worker` modules. `MCPO.Telemetry` saves the `perform/1` return value as the task result. `use MCPO.Tool` in a worker is optional: it keeps `@moduledoc` and the tool options in `__mcpo_tool__/0` at compile time, because `Code.fetch_docs/1` does not work during compilation and releases strip docs.
-- `MCPO.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcpo, :task, ...]` events.
-- `MCPO.Application`: attaches the telemetry handler. It starts no processes.
-- `MCPO.ExMCP` and `MCPO.ExMCP.Store`: the ExMCP adapter. `use MCPO.ExMCP, tools: [Worker, ...]` generates the handler callbacks. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
-- `MCPO.FastestMCP`: the FastestMCP adapter (`add_tools/3`). Each tool inserts a job and waits for it; FastestMCP owns the MCP task. A watcher process cancels the MCPO task when FastestMCP kills the waiting tool. Also optional and inside `if Code.ensure_loaded?(...)`.
-- `MCPO.ToolSpec`: builds the tool list (name, description, input schema) for both adapters.
+- `MCPOban`: public API (`enqueue/3`, `status/2`, `get/2`, `await/2`, `cancel/2`, `cancelled?/1`). Keep it this small. `complete/3`, `fail/3` and `transition/4` are `@doc false`, for adapters only.
+- `MCPOban.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
+- Workers are plain `Oban.Worker` modules. `MCPOban.Telemetry` saves the `perform/1` return value as the task result. `use MCPOban.Tool` in a worker is optional: it keeps `@moduledoc` and the tool options in `__mcp_oban_tool__/0` at compile time, because `Code.fetch_docs/1` does not work during compilation and releases strip docs.
+- `MCPOban.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcp_oban, :task, ...]` events.
+- `MCPOban.Application`: attaches the telemetry handler. It starts no processes.
+- `MCPOban.ExMCP` and `MCPOban.ExMCP.Store`: the ExMCP adapter. `use MCPOban.ExMCP, tools: [Worker, ...]` generates the handler callbacks. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
+- `MCPOban.FastestMCP`: the FastestMCP adapter (`add_tools/3`). Each tool inserts a job and waits for it; FastestMCP owns the MCP task. A watcher process cancels the MCPOban task when FastestMCP kills the waiting tool. Also optional and inside `if Code.ensure_loaded?(...)`.
+- `MCPOban.ToolSpec`: builds the tool list (name, description, input schema) for both adapters.
 - `examples/report_server`: an example app. Run `mix run demo.exs` in it to check the full flow with real Oban queues.
-- MCPO uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
+- MCPOban uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
 - Tests that kill processes in the middle of a query use `@tag :unsandboxed` (see `test/support/data_case.ex`).
-- Tests need a local Postgres. `test/test_helper.exs` creates the `mcpo_test` database and runs the migrations.
+- Tests need a local Postgres. `test/test_helper.exs` creates the `mcp_oban_test` database and runs the migrations.

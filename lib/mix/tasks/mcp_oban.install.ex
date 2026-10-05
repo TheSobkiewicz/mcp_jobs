@@ -1,14 +1,14 @@
-defmodule Mix.Tasks.Mcpo.Install do
-  @shortdoc "Creates the MCPO migration and an MCP server module"
+defmodule Mix.Tasks.McpOban.Install do
+  @shortdoc "Creates the MCPOban migration and an MCP server module"
 
   @moduledoc """
-  Creates the files that MCPO needs, and prints the remaining steps.
+  Creates the files that MCPOban needs, and prints the remaining steps.
 
-      $ mix mcpo.install
+      $ mix mcp_oban.install
 
   It creates:
 
-    * a migration for the `mcpo_tasks` table, in the migrations folder of the repo
+    * a migration for the `mcp_oban_tasks` table, in the migrations folder of the repo
     * an MCP server module, `lib/my_app/mcp_server.ex`, when `ex_mcp` is a dependency
 
   It does not change existing files. It asks before it replaces a file.
@@ -70,10 +70,10 @@ defmodule Mix.Tasks.Mcpo.Install do
 
     migrations = Path.join(repo_priv(repo), "migrations")
 
-    case Path.wildcard(Path.join(migrations, "*_add_mcpo_tasks.exs")) do
+    case Path.wildcard(Path.join(migrations, "*_add_mcp_oban_tasks.exs")) do
       [] ->
         prefix_opts = if opts[:prefix], do: "prefix: #{inspect(opts[:prefix])}", else: ""
-        file = Path.join(migrations, "#{timestamp()}_add_mcpo_tasks.exs")
+        file = Path.join(migrations, "#{timestamp()}_add_mcp_oban_tasks.exs")
 
         create_file(file, migration_template(repo: inspect(repo), opts: prefix_opts))
 
@@ -112,8 +112,8 @@ defmodule Mix.Tasks.Mcpo.Install do
       else
         """
 
-        3. Add {:ex_mcp, "~> 1.5"} to your deps and run `mix mcpo.install` again
-           for an MCP server module. Or use MCPO.enqueue/3 with your own MCP server.
+        3. Add {:ex_mcp, "~> 1.5"} to your deps and run `mix mcp_oban.install` again
+           for an MCP server module. Or use MCPOban.enqueue/3 with your own MCP server.
         """
       end
 
@@ -125,19 +125,19 @@ defmodule Mix.Tasks.Mcpo.Install do
 
            mix ecto.migrate
 
-       MCPO needs Oban. If Oban is not set up yet, see https://hexdocs.pm/oban.
+       MCPOban needs Oban. If Oban is not set up yet, see https://hexdocs.pm/oban.
 
-    2. Delete old tasks every hour. Add MCPO.Cleaner to the Cron plugin of Oban:
+    2. Delete old tasks every hour. Add MCPOban.Cleaner to the Cron plugin of Oban:
 
            config :#{app}, Oban,
-             plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPO.Cleaner}]}]
+             plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPOban.Cleaner}]}]
 
        The Cleaner uses the :default queue. If your app does not run it, set a
-       queue: {"@hourly", MCPO.Cleaner, queue: :maintenance}
+       queue: {"@hourly", MCPOban.Cleaner, queue: :maintenance}
 
        If your Oban instance is not named Oban, also add:
 
-           config :mcpo, oban: MyApp.Oban
+           config :mcp_oban, oban: MyApp.Oban
     """ <> server_steps
   end
 
@@ -149,11 +149,11 @@ defmodule Mix.Tasks.Mcpo.Install do
   end
 
   embed_template(:migration, """
-  defmodule <%= @repo %>.Migrations.AddMCPOTasks do
+  defmodule <%= @repo %>.Migrations.AddMCPObanTasks do
     use Ecto.Migration
 
-    def up, do: MCPO.Migration.up(<%= @opts %>)
-    def down, do: MCPO.Migration.down(<%= @opts %>)
+    def up, do: MCPOban.Migration.up(<%= @opts %>)
+    def down, do: MCPOban.Migration.down(<%= @opts %>)
   end
   """)
 
@@ -163,7 +163,7 @@ defmodule Mix.Tasks.Mcpo.Install do
     The MCP server. Each tool runs as an Oban job.
     \"\"\"
 
-    use MCPO.ExMCP,
+    use MCPOban.ExMCP,
       tools: [
         # MyApp.Workers.GenerateReport
       ]

@@ -1,4 +1,4 @@
-defmodule MCPO do
+defmodule MCPOban do
   @moduledoc """
   Runs MCP tasks as Oban jobs.
 
@@ -17,12 +17,12 @@ defmodule MCPO do
   The result is stored as JSON, so atom keys come back as strings. A result
   that cannot be stored as JSON makes the task `:failed`.
 
-  Oban marks the job completed before MCPO saves the result. Until the result
+  Oban marks the job completed before MCPOban saves the result. Until the result
   is saved, the task stays `:working`. If the result is not saved within 5
   seconds (for example, the node stopped), the task becomes `:completed` with no
-  result. Change the time with `config :mcpo, result_grace_period: 5_000`.
+  result. Change the time with `config :mcp_oban, result_grace_period: 5_000`.
 
-  When Oban deletes a job before MCPO sees its final state (for example, the
+  When Oban deletes a job before MCPOban sees its final state (for example, the
   Pruner removed it), the task becomes `:cancelled`. Keep the Pruner `max_age`
   longer than the time clients take to read a result.
 
@@ -31,22 +31,22 @@ defmodule MCPO do
   Oban's default unique states, a job that has already completed within the
   unique period also counts as a duplicate.
 
-  MCPO does not implement the MCP protocol. An MCP server adapter translates
+  MCPOban does not implement the MCP protocol. An MCP server adapter translates
   these functions into MCP messages.
 
   ## Options
 
   All functions take an `:oban` option with the name of the Oban instance. The
-  default is `Oban`, or the value of `config :mcpo, oban: MyApp.Oban`.
-  MCPO uses the repo and prefix of that Oban instance.
+  default is `Oban`, or the value of `config :mcp_oban, oban: MyApp.Oban`.
+  MCPOban uses the repo and prefix of that Oban instance.
   """
 
   import Ecto.Query, only: [where: 3]
 
-  alias MCPO.Repository
-  alias MCPO.Status
-  alias MCPO.Task
-  alias MCPO.Telemetry
+  alias MCPOban.Repository
+  alias MCPOban.Status
+  alias MCPOban.Task
+  alias MCPOban.Telemetry
 
   @cancellable_states ~w(available scheduled retryable suspended)
   @result_grace_period 5_000
@@ -329,7 +329,7 @@ defmodule MCPO do
   # Oban marks the job completed before the telemetry event saves the result.
   # Repairing the task in this window would lose the result.
   defp result_pending?(%Oban.Job{completed_at: completed_at}) do
-    grace = Application.get_env(:mcpo, :result_grace_period, @result_grace_period)
+    grace = Application.get_env(:mcp_oban, :result_grace_period, @result_grace_period)
 
     is_nil(completed_at) or
       DateTime.diff(DateTime.utc_now(), completed_at, :millisecond) < grace
@@ -360,7 +360,7 @@ defmodule MCPO do
 
   defp config(opts) do
     opts
-    |> Keyword.get_lazy(:oban, fn -> Application.get_env(:mcpo, :oban, Oban) end)
+    |> Keyword.get_lazy(:oban, fn -> Application.get_env(:mcp_oban, :oban, Oban) end)
     |> Oban.config()
   end
 

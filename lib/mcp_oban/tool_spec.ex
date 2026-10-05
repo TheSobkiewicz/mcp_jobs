@@ -1,8 +1,8 @@
-defmodule MCPO.ToolSpec do
+defmodule MCPOban.ToolSpec do
   @moduledoc false
 
   # Builds the tool list for the MCP server adapters from `tools:` entries.
-  # Values come from the entry options, then `use MCPO.Tool`, then the Oban Pro
+  # Values come from the entry options, then `use MCPOban.Tool`, then the Oban Pro
   # `args_schema`, then the defaults.
 
   @type t :: %{name: String.t(), worker: module(), description: String.t(), input_schema: map()}
@@ -14,7 +14,7 @@ defmodule MCPO.ToolSpec do
 
     case names -- Enum.uniq(names) do
       [] -> specs
-      duplicates -> raise ArgumentError, "duplicate MCPO tool names: #{inspect(duplicates)}"
+      duplicates -> raise ArgumentError, "duplicate MCPOban tool names: #{inspect(duplicates)}"
     end
   end
 
@@ -27,7 +27,7 @@ defmodule MCPO.ToolSpec do
       raise ArgumentError, "#{inspect(worker)} is not an Oban worker"
     end
 
-    opts = Keyword.merge(MCPO.Tool.options(worker), opts)
+    opts = Keyword.merge(MCPOban.Tool.options(worker), opts)
 
     %{
       name: Keyword.get_lazy(opts, :name, fn -> default_name(worker) end),
@@ -36,7 +36,7 @@ defmodule MCPO.ToolSpec do
         Keyword.get(opts, :description, "Runs #{inspect(worker)} as a background job."),
       input_schema:
         Keyword.get_lazy(opts, :input_schema, fn ->
-          MCPO.ArgsSchema.from_worker(worker) || %{"type" => "object"}
+          MCPOban.ArgsSchema.from_worker(worker) || %{"type" => "object"}
         end)
     }
   end

@@ -1,18 +1,18 @@
-defmodule MCPO.Cleaner do
+defmodule MCPOban.Cleaner do
   @moduledoc """
   An Oban worker that deletes old terminal tasks. It never deletes `:working` tasks.
 
   Set the retention time in milliseconds. The default is 24 hours:
 
-      config :mcpo, task_retention: :timer.hours(24)
+      config :mcp_oban, task_retention: :timer.hours(24)
 
   Run it with the Oban Cron plugin:
 
       config :my_app, Oban,
-        plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPO.Cleaner}]}]
+        plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPOban.Cleaner}]}]
 
   The job goes to the `:default` queue. If your app does not run that queue, set
-  a queue that it runs: `{"@hourly", MCPO.Cleaner, queue: :maintenance}`.
+  a queue that it runs: `{"@hourly", MCPOban.Cleaner, queue: :maintenance}`.
   Otherwise the job never runs, and old tasks are never deleted.
   """
 
@@ -22,9 +22,9 @@ defmodule MCPO.Cleaner do
 
   @impl Oban.Worker
   def perform(%Oban.Job{conf: conf}) do
-    retention = Application.get_env(:mcpo, :task_retention, @default_retention)
+    retention = Application.get_env(:mcp_oban, :task_retention, @default_retention)
     cutoff = DateTime.add(DateTime.utc_now(), -retention, :millisecond)
 
-    {:ok, MCPO.Repository.delete_terminal_before(conf, cutoff)}
+    {:ok, MCPOban.Repository.delete_terminal_before(conf, cutoff)}
   end
 end

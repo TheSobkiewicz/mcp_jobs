@@ -1,9 +1,9 @@
-defmodule MCPO.MixProject do
+defmodule MCPOban.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :mcpo,
+      app: :mcp_oban,
       version: "0.1.0",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -16,7 +16,7 @@ defmodule MCPO.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {MCPO.Application, []}
+      mod: {MCPOban.Application, []}
     ]
   end
 

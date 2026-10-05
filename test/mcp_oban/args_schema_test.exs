@@ -1,10 +1,10 @@
-defmodule MCPO.ArgsSchemaTest do
+defmodule MCPOban.ArgsSchemaTest do
   use ExUnit.Case, async: true
 
-  alias MCPO.Test.{PlainWorker, ProWorker}
+  alias MCPOban.Test.{PlainWorker, ProWorker}
 
   test "builds a JSON Schema from an Oban Pro args_schema" do
-    assert MCPO.ArgsSchema.from_worker(ProWorker) == %{
+    assert MCPOban.ArgsSchema.from_worker(ProWorker) == %{
              "type" => "object",
              "additionalProperties" => false,
              "required" => ["id", "name", "data"],
@@ -41,7 +41,7 @@ defmodule MCPO.ArgsSchemaTest do
   end
 
   test "returns nil for a worker without args_schema" do
-    assert MCPO.ArgsSchema.from_worker(PlainWorker) == nil
+    assert MCPOban.ArgsSchema.from_worker(PlainWorker) == nil
   end
 
   test "the tools list uses the Pro schema unless input_schema is given" do
@@ -49,7 +49,7 @@ defmodule MCPO.ArgsSchemaTest do
              %{input_schema: %{"required" => ["id", "name", "data"]}},
              %{input_schema: %{"type" => "object"} = given}
            ] =
-             MCPO.ExMCP.__tools__([
+             MCPOban.ExMCP.__tools__([
                ProWorker,
                {ProWorker, name: "pro_override", input_schema: %{"type" => "object"}}
              ])
@@ -58,10 +58,10 @@ defmodule MCPO.ArgsSchemaTest do
   end
 
   test "arguments are checked against the Pro schema" do
-    [spec] = MCPO.ExMCP.__tools__([ProWorker])
+    [spec] = MCPOban.ExMCP.__tools__([ProWorker])
 
     assert {:ok, %{"isError" => true, "content" => [%{"text" => text}]}, :state} =
-             MCPO.ExMCP.__call_tool__(
+             MCPOban.ExMCP.__call_tool__(
                [spec],
                "pro_worker",
                %{"id" => 1, "extra" => true},

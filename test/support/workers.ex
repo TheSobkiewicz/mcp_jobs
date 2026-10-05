@@ -1,4 +1,4 @@
-defmodule MCPO.Test.SuccessWorker do
+defmodule MCPOban.Test.SuccessWorker do
   @moduledoc false
   use Oban.Worker
 
@@ -6,7 +6,7 @@ defmodule MCPO.Test.SuccessWorker do
   def perform(%Oban.Job{args: %{"value" => value}}), do: {:ok, %{"value" => value}}
 end
 
-defmodule MCPO.Test.ValueWorker do
+defmodule MCPOban.Test.ValueWorker do
   @moduledoc false
   use Oban.Worker
 
@@ -14,7 +14,7 @@ defmodule MCPO.Test.ValueWorker do
   def perform(%Oban.Job{}), do: {:ok, "done"}
 end
 
-defmodule MCPO.Test.PlainWorker do
+defmodule MCPOban.Test.PlainWorker do
   @moduledoc false
   use Oban.Worker
 
@@ -22,7 +22,7 @@ defmodule MCPO.Test.PlainWorker do
   def perform(%Oban.Job{}), do: :ok
 end
 
-defmodule MCPO.Test.FlakyWorker do
+defmodule MCPOban.Test.FlakyWorker do
   @moduledoc false
   use Oban.Worker, max_attempts: 3
 
@@ -34,7 +34,7 @@ defmodule MCPO.Test.FlakyWorker do
   def perform(%Oban.Job{}), do: {:error, "not yet"}
 end
 
-defmodule MCPO.Test.FailingWorker do
+defmodule MCPOban.Test.FailingWorker do
   @moduledoc false
   use Oban.Worker, max_attempts: 2
 
@@ -42,7 +42,7 @@ defmodule MCPO.Test.FailingWorker do
   def perform(%Oban.Job{}), do: {:error, "boom"}
 end
 
-defmodule MCPO.Test.CrashingWorker do
+defmodule MCPOban.Test.CrashingWorker do
   @moduledoc false
   use Oban.Worker, max_attempts: 1
 
@@ -50,54 +50,54 @@ defmodule MCPO.Test.CrashingWorker do
   def perform(%Oban.Job{}), do: raise("crash")
 end
 
-defmodule MCPO.Test.CancelledDuringRunWorker do
+defmodule MCPOban.Test.CancelledDuringRunWorker do
   @moduledoc false
   use Oban.Worker
 
   @impl Oban.Worker
   def perform(%Oban.Job{meta: %{"mcp_task_id" => task_id}} = job) do
-    {:ok, _task} = MCPO.cancel(task_id)
+    {:ok, _task} = MCPOban.cancel(task_id)
 
-    if MCPO.cancelled?(job), do: {:cancel, :mcp_task_cancelled}, else: {:ok, %{}}
+    if MCPOban.cancelled?(job), do: {:cancel, :mcp_task_cancelled}, else: {:ok, %{}}
   end
 end
 
-defmodule MCPO.Test.DocumentedWorker do
+defmodule MCPOban.Test.DocumentedWorker do
   @moduledoc """
   Builds a summary.
   """
 
   use Oban.Worker
 
-  use MCPO.Tool,
+  use MCPOban.Tool,
     input_schema: %{"type" => "object", "properties" => %{"text" => %{"type" => "string"}}}
 
   @impl Oban.Worker
   def perform(%Oban.Job{}), do: :ok
 end
 
-defmodule MCPO.Test.HiddenDocWorker do
+defmodule MCPOban.Test.HiddenDocWorker do
   @moduledoc false
 
   use Oban.Worker
-  use MCPO.Tool, name: "hidden"
+  use MCPOban.Tool, name: "hidden"
 
   @impl Oban.Worker
   def perform(%Oban.Job{}), do: :ok
 end
 
-defmodule MCPO.Test.ProWorker.Data do
+defmodule MCPOban.Test.ProWorker.Data do
   @moduledoc false
   def __args_schema__,
     do: [office_id: [required: true, type: :uuid], has_notes: [default: false, type: :boolean]]
 end
 
-defmodule MCPO.Test.ProWorker.Addresses do
+defmodule MCPOban.Test.ProWorker.Addresses do
   @moduledoc false
   def __args_schema__, do: [city: [type: :string]]
 end
 
-defmodule MCPO.Test.ProWorker do
+defmodule MCPOban.Test.ProWorker do
   @moduledoc false
   use Oban.Worker
 
@@ -110,10 +110,10 @@ defmodule MCPO.Test.ProWorker do
       tags: [type: {:array, :string}],
       at: [type: :utc_datetime],
       xtra: [type: :term],
-      data: [cardinality: :one, module: MCPO.Test.ProWorker.Data, required: true, type: :embed],
+      data: [cardinality: :one, module: MCPOban.Test.ProWorker.Data, required: true, type: :embed],
       addresses: [
         cardinality: :many,
-        module: MCPO.Test.ProWorker.Addresses,
+        module: MCPOban.Test.ProWorker.Addresses,
         required: false,
         type: :embed
       ]
@@ -124,7 +124,7 @@ defmodule MCPO.Test.ProWorker do
   def perform(%Oban.Job{}), do: :ok
 end
 
-defmodule MCPO.Test.UniqueWorker do
+defmodule MCPOban.Test.UniqueWorker do
   @moduledoc false
   use Oban.Worker, unique: [period: 60]
 
@@ -132,7 +132,7 @@ defmodule MCPO.Test.UniqueWorker do
   def perform(%Oban.Job{}), do: :ok
 end
 
-defmodule MCPO.Test.TupleWorker do
+defmodule MCPOban.Test.TupleWorker do
   @moduledoc false
   use Oban.Worker
 
@@ -140,7 +140,7 @@ defmodule MCPO.Test.TupleWorker do
   def perform(%Oban.Job{}), do: {:ok, {:not, :json}}
 end
 
-defmodule MCPO.Test.NulWorker do
+defmodule MCPOban.Test.NulWorker do
   @moduledoc false
   use Oban.Worker
 

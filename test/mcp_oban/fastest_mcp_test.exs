@@ -1,10 +1,10 @@
-defmodule MCPO.FastestMCPTest do
-  use MCPO.DataCase
+defmodule MCPOban.FastestMCPTest do
+  use MCPOban.DataCase
 
-  alias MCPO.Task
+  alias MCPOban.Task
 
   @tools [
-    {MCPO.Test.SuccessWorker,
+    {MCPOban.Test.SuccessWorker,
      name: "generate_report",
      description: "Generates a report.",
      input_schema: %{
@@ -12,18 +12,18 @@ defmodule MCPO.FastestMCPTest do
        "properties" => %{"value" => %{"type" => "integer"}},
        "required" => ["value"]
      }},
-    {MCPO.Test.FailingWorker, name: "failing_report"},
-    {MCPO.Test.UniqueWorker, name: "unique_report"},
-    MCPO.Test.DocumentedWorker
+    {MCPOban.Test.FailingWorker, name: "failing_report"},
+    {MCPOban.Test.UniqueWorker, name: "unique_report"},
+    MCPOban.Test.DocumentedWorker
   ]
 
   setup do
-    name = "mcpo-test-#{System.unique_integer([:positive])}"
+    name = "mcp_oban-test-#{System.unique_integer([:positive])}"
 
     server =
       name
       |> FastestMCP.server()
-      |> MCPO.FastestMCP.add_tools(@tools, wait_timeout: 300)
+      |> MCPOban.FastestMCP.add_tools(@tools, wait_timeout: 300)
 
     {:ok, _pid} = FastestMCP.start_server(server)
     on_exit(fn -> FastestMCP.stop_server(name) end)
@@ -68,7 +68,7 @@ defmodule MCPO.FastestMCPTest do
   end
 
   @tag :unsandboxed
-  test "cancelling the FastestMCP task cancels the MCPO task and its job", %{name: name} do
+  test "cancelling the FastestMCP task cancels the MCPOban task and its job", %{name: name} do
     %FastestMCP.BackgroundTask{task_id: task_id} =
       task = FastestMCP.call_tool(name, "generate_report", %{"value" => 8}, task: true)
 
@@ -114,7 +114,7 @@ defmodule MCPO.FastestMCPTest do
   end
 
   test "a duplicate unique job returns an error result", %{name: name} do
-    {:ok, _task} = MCPO.enqueue(MCPO.Test.UniqueWorker, %{"q" => 1})
+    {:ok, _task} = MCPOban.enqueue(MCPOban.Test.UniqueWorker, %{"q" => 1})
 
     assert %{
              isError: true,

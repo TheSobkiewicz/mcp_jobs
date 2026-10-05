@@ -1,13 +1,13 @@
-defmodule MCPO.Telemetry do
+defmodule MCPOban.Telemetry do
   @moduledoc """
-  Telemetry events that MCPO sends, and the Oban events it listens to.
+  Telemetry events that MCPOban sends, and the Oban events it listens to.
 
   ## Events
 
-    * `[:mcpo, :task, :started]`: a task and its Oban job are inserted.
-    * `[:mcpo, :task, :completed]`
-    * `[:mcpo, :task, :failed]`
-    * `[:mcpo, :task, :cancelled]`
+    * `[:mcp_oban, :task, :started]`: a task and its Oban job are inserted.
+    * `[:mcp_oban, :task, :completed]`
+    * `[:mcp_oban, :task, :failed]`
+    * `[:mcp_oban, :task, :cancelled]`
 
   Measurements: `:system_time` for `:started`. `:duration` for the other events,
   in native time units, from task insert to the status change.
@@ -16,11 +16,11 @@ defmodule MCPO.Telemetry do
 
   ## Oban events
 
-  MCPO attaches to `[:oban, :job, :stop]` and `[:oban, :job, :exception]` when
+  MCPOban attaches to `[:oban, :job, :stop]` and `[:oban, :job, :exception]` when
   its application starts. It changes a task only when Oban reports a final state
   (`:success`, `:discard` or `:cancelled`). A `:failure` state is a retry, so the
   task stays `:working`. When a `:failure` or `:snoozed` job belongs to a task that
-  is already cancelled, MCPO cancels the job, so it does not run again.
+  is already cancelled, MCPOban cancels the job, so it does not run again.
 
   On `:success`, the return value of `perform/1` becomes the task result:
   `{:ok, map}` saves the map, `{:ok, value}` saves `%{"value" => value}`, and
@@ -30,9 +30,9 @@ defmodule MCPO.Telemetry do
 
   require Logger
 
-  alias MCPO.Task
+  alias MCPOban.Task
 
-  @handler_id "mcpo-job-handler"
+  @handler_id "mcp_oban-job-handler"
 
   @doc false
   @spec attach() :: :ok | {:error, :already_exists}
@@ -55,12 +55,12 @@ defmodule MCPO.Telemetry do
       when state in [:success, :discard, :cancelled] do
     case state do
       :success -> complete(conf, task_id, result(meta))
-      :discard -> MCPO.transition(conf, task_id, :failed, error: error(meta))
-      :cancelled -> MCPO.transition(conf, task_id, :cancelled, [])
+      :discard -> MCPOban.transition(conf, task_id, :failed, error: error(meta))
+      :cancelled -> MCPOban.transition(conf, task_id, :cancelled, [])
     end
   rescue
     exception ->
-      Logger.error("[MCPO] telemetry handler failed: " <> Exception.message(exception))
+      Logger.error("[MCPOban] telemetry handler failed: " <> Exception.message(exception))
   end
 
   # A task that was cancelled while its job ran must not run again on a retry.
@@ -75,13 +75,13 @@ defmodule MCPO.Telemetry do
         _config
       )
       when state in [:failure, :snoozed] do
-    case MCPO.Repository.get(conf, task_id) do
+    case MCPOban.Repository.get(conf, task_id) do
       %Task{status: :cancelled} -> Oban.cancel_job(name, job_id)
       _working_or_missing -> :ok
     end
   rescue
     exception ->
-      Logger.error("[MCPO] telemetry handler failed: " <> Exception.message(exception))
+      Logger.error("[MCPOban] telemetry handler failed: " <> Exception.message(exception))
   end
 
   def handle_event(_event, _measurements, _meta, _config), do: :ok
@@ -90,7 +90,7 @@ defmodule MCPO.Telemetry do
   @spec emit(Task.t()) :: :ok
   def emit(%Task{status: :working} = task) do
     :telemetry.execute(
-      [:mcpo, :task, :started],
+      [:mcp_oban, :task, :started],
       %{system_time: System.system_time()},
       metadata(task)
     )
@@ -102,7 +102,7 @@ defmodule MCPO.Telemetry do
       |> DateTime.diff(inserted_at, :microsecond)
       |> System.convert_time_unit(:microsecond, :native)
 
-    :telemetry.execute([:mcpo, :task, status], %{duration: duration}, metadata(task))
+    :telemetry.execute([:mcp_oban, :task, status], %{duration: duration}, metadata(task))
   end
 
   defp metadata(%Task{task_id: task_id, oban_job_id: job_id, worker: worker}) do
@@ -112,12 +112,12 @@ defmodule MCPO.Telemetry do
   defp complete(conf, task_id, result) do
     case storable(result) do
       :ok ->
-        MCPO.transition(conf, task_id, :completed, result: result)
+        MCPOban.transition(conf, task_id, :completed, result: result)
 
       {:error, reason} ->
-        Logger.error("[MCPO] the result of task #{task_id} is not valid JSON: #{reason}")
+        Logger.error("[MCPOban] the result of task #{task_id} is not valid JSON: #{reason}")
         error = %{"message" => "The result could not be saved as JSON."}
-        MCPO.transition(conf, task_id, :failed, error: error)
+        MCPOban.transition(conf, task_id, :failed, error: error)
     end
   end
 

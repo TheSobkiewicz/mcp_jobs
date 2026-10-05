@@ -1,4 +1,4 @@
-defmodule MCPO.ArgsSchema do
+defmodule MCPOban.ArgsSchema do
   @moduledoc false
 
   # Builds a JSON Schema from the `args_schema` of an Oban Pro worker.

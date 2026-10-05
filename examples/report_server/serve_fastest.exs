@@ -3,7 +3,7 @@ port = String.to_integer(System.get_env("PORT", "4001"))
 {:ok, _pid} =
   "report-server"
   |> FastestMCP.server()
-  |> MCPO.FastestMCP.add_tools([ReportServer.Workers.GenerateReport])
+  |> MCPOban.FastestMCP.add_tools([ReportServer.Workers.GenerateReport])
   |> FastestMCP.start_server()
 
 {:ok, _pid} =

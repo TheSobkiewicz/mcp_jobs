@@ -1,9 +1,9 @@
-defmodule MCPOTest do
-  use MCPO.DataCase
+defmodule MCPObanTest do
+  use MCPOban.DataCase
 
-  alias MCPO.Task
+  alias MCPOban.Task
 
-  alias MCPO.Test.{
+  alias MCPOban.Test.{
     CancelledDuringRunWorker,
     CrashingWorker,
     FailingWorker,
@@ -16,7 +16,7 @@ defmodule MCPOTest do
   describe "enqueue/3" do
     test "creates a working task and inserts its job" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id, status: :working}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1})
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
 
       assert_enqueued(worker: SuccessWorker, args: %{value: 1}, meta: %{mcp_task_id: task_id})
       assert %Oban.Job{id: ^job_id} = Repo.one(Oban.Job)
@@ -24,22 +24,22 @@ defmodule MCPOTest do
 
     test "uses the given task ID and passes job options" do
       {:ok, %Task{task_id: "abc"}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1}, task_id: "abc", job: [priority: 3])
+        MCPOban.enqueue(SuccessWorker, %{value: 1}, task_id: "abc", job: [priority: 3])
 
       assert_enqueued(worker: SuccessWorker, priority: 3, meta: %{mcp_task_id: "abc"})
     end
 
     test "makes random task IDs" do
-      {:ok, %Task{task_id: first}} = MCPO.enqueue(SuccessWorker, %{value: 1})
-      {:ok, %Task{task_id: second}} = MCPO.enqueue(SuccessWorker, %{value: 1})
+      {:ok, %Task{task_id: first}} = MCPOban.enqueue(SuccessWorker, %{value: 1})
+      {:ok, %Task{task_id: second}} = MCPOban.enqueue(SuccessWorker, %{value: 1})
 
       assert first != second
       assert byte_size(first) >= 22
     end
 
     test "returns the existing task and inserts no job for a duplicate task ID" do
-      {:ok, %Task{id: id}} = MCPO.enqueue(SuccessWorker, %{value: 1}, task_id: "dup")
-      {:ok, %Task{id: ^id}} = MCPO.enqueue(SuccessWorker, %{value: 2}, task_id: "dup")
+      {:ok, %Task{id: id}} = MCPOban.enqueue(SuccessWorker, %{value: 1}, task_id: "dup")
+      {:ok, %Task{id: ^id}} = MCPOban.enqueue(SuccessWorker, %{value: 2}, task_id: "dup")
 
       assert [%Oban.Job{args: %{"value" => 1}}] = Repo.all(Oban.Job)
     end
@@ -49,7 +49,7 @@ defmodule MCPOTest do
         1..10
         |> Enum.map(fn _ ->
           Elixir.Task.async(fn ->
-            MCPO.enqueue(SuccessWorker, %{value: 1}, task_id: "same")
+            MCPOban.enqueue(SuccessWorker, %{value: 1}, task_id: "same")
           end)
         end)
         |> Elixir.Task.await_many()
@@ -63,23 +63,23 @@ defmodule MCPOTest do
   describe "successful job" do
     test "completes the task and saves the result" do
       attach_telemetry()
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 42})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 42})
 
-      assert {:ok, %{status: :working}} = MCPO.status(task_id)
+      assert {:ok, %{status: :working}} = MCPOban.status(task_id)
       assert %{success: 1} = drain()
-      assert {:ok, %{status: :completed, result: %{"value" => 42}}} = MCPO.status(task_id)
+      assert {:ok, %{status: :completed, result: %{"value" => 42}}} = MCPOban.status(task_id)
 
-      assert_received {:telemetry, [:mcpo, :task, :started], %{system_time: _},
-                       %{task_id: ^task_id, worker: "MCPO.Test.SuccessWorker"}}
+      assert_received {:telemetry, [:mcp_oban, :task, :started], %{system_time: _},
+                       %{task_id: ^task_id, worker: "MCPOban.Test.SuccessWorker"}}
 
-      assert_received {:telemetry, [:mcpo, :task, :completed], %{duration: duration},
+      assert_received {:telemetry, [:mcp_oban, :task, :completed], %{duration: duration},
                        %{task_id: ^task_id, oban_job_id: job_id}}
 
       assert is_integer(duration) and is_integer(job_id)
     end
 
     test "saves the result in the task when perform/1 returns it" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 3})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 3})
 
       drain()
 
@@ -88,15 +88,15 @@ defmodule MCPOTest do
     end
 
     test "wraps a result that is not a map" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(ValueWorker, %{})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(ValueWorker, %{})
 
       drain()
 
-      assert {:ok, %{status: :completed, result: %{"value" => "done"}}} = MCPO.status(task_id)
+      assert {:ok, %{status: :completed, result: %{"value" => "done"}}} = MCPOban.status(task_id)
     end
 
     test "completes the task without a result when perform/1 returns :ok" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(PlainWorker, %{})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(PlainWorker, %{})
 
       drain()
 
@@ -107,40 +107,40 @@ defmodule MCPOTest do
   describe "retry" do
     test "keeps the task working between attempts, then completes it" do
       attach_telemetry()
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(FlakyWorker, %{succeed_on: 3})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(FlakyWorker, %{succeed_on: 3})
 
       assert %{failure: 1} = Oban.drain_queue(queue: :default)
-      assert {:ok, %{status: :working}} = MCPO.status(task_id)
+      assert {:ok, %{status: :working}} = MCPOban.status(task_id)
 
       assert %{failure: 1} = Oban.drain_queue(queue: :default, with_scheduled: true)
-      assert {:ok, %{status: :working}} = MCPO.status(task_id)
+      assert {:ok, %{status: :working}} = MCPOban.status(task_id)
 
       assert %{success: 1} = Oban.drain_queue(queue: :default, with_scheduled: true)
-      assert {:ok, %{status: :completed, result: %{"attempt" => 3}}} = MCPO.status(task_id)
+      assert {:ok, %{status: :completed, result: %{"attempt" => 3}}} = MCPOban.status(task_id)
 
-      refute_received {:telemetry, [:mcpo, :task, :failed], _, _}
+      refute_received {:telemetry, [:mcp_oban, :task, :failed], _, _}
     end
   end
 
   describe "permanent failure" do
     test "fails the task when Oban discards the job" do
       attach_telemetry()
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(FailingWorker, %{})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(FailingWorker, %{})
 
       assert %{failure: 1, discard: 1} = drain()
       assert %Task{status: :failed} = Repo.get_by(Task, task_id: task_id)
-      assert {:ok, %{status: :failed, error: %{"message" => message}}} = MCPO.status(task_id)
+      assert {:ok, %{status: :failed, error: %{"message" => message}}} = MCPOban.status(task_id)
       assert message =~ "boom"
 
-      assert_received {:telemetry, [:mcpo, :task, :failed], _, %{task_id: ^task_id}}
+      assert_received {:telemetry, [:mcp_oban, :task, :failed], _, %{task_id: ^task_id}}
     end
 
     test "fails the task when the worker raises" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(CrashingWorker, %{})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(CrashingWorker, %{})
 
       drain()
 
-      assert {:ok, %{status: :failed, error: %{"message" => "crash"}}} = MCPO.status(task_id)
+      assert {:ok, %{status: :failed, error: %{"message" => "crash"}}} = MCPOban.status(task_id)
     end
   end
 
@@ -149,148 +149,149 @@ defmodule MCPOTest do
       attach_telemetry()
 
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1})
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
 
-      assert {:ok, %Task{status: :cancelled}} = MCPO.cancel(task_id)
-      assert {:ok, %{status: :cancelled}} = MCPO.status(task_id)
+      assert {:ok, %Task{status: :cancelled}} = MCPOban.cancel(task_id)
+      assert {:ok, %{status: :cancelled}} = MCPOban.status(task_id)
       assert %Oban.Job{state: "cancelled"} = Repo.get(Oban.Job, job_id)
 
-      assert_received {:telemetry, [:mcpo, :task, :cancelled], _, %{task_id: ^task_id}}
+      assert_received {:telemetry, [:mcp_oban, :task, :cancelled], _, %{task_id: ^task_id}}
     end
 
     test "does not cancel a running job, and the worker does not save its result" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1})
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
 
       Repo.update_all(where(Oban.Job, id: ^job_id), set: [state: "executing"])
 
-      {:ok, _task} = MCPO.cancel(task_id)
+      {:ok, _task} = MCPOban.cancel(task_id)
 
       assert %Oban.Job{state: "executing"} = Repo.get(Oban.Job, job_id)
 
       Repo.update_all(where(Oban.Job, id: ^job_id), set: [state: "available"])
       assert %{success: 1} = drain()
 
-      assert {:ok, %Task{status: :cancelled, result: nil}} = MCPO.get(task_id)
+      assert {:ok, %Task{status: :cancelled, result: nil}} = MCPOban.get(task_id)
     end
 
     test "kills a running job with the kill option" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1})
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
 
       Repo.update_all(where(Oban.Job, id: ^job_id), set: [state: "executing"])
 
-      {:ok, _task} = MCPO.cancel(task_id, kill: true)
+      {:ok, _task} = MCPOban.cancel(task_id, kill: true)
 
       assert %Oban.Job{state: "cancelled"} = Repo.get(Oban.Job, job_id)
     end
 
     test "lets a running worker see the cancel and stop" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(CancelledDuringRunWorker, %{})
+        MCPOban.enqueue(CancelledDuringRunWorker, %{})
 
       assert %{cancelled: 1} = drain()
-      assert {:ok, %Task{status: :cancelled, result: nil}} = MCPO.get(task_id)
+      assert {:ok, %Task{status: :cancelled, result: nil}} = MCPOban.get(task_id)
       assert %Oban.Job{state: "cancelled"} = Repo.get(Oban.Job, job_id)
     end
 
     test "returns an error for a terminal or unknown task" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 1})
       drain()
 
-      assert {:error, :terminal} = MCPO.cancel(task_id)
-      assert {:error, :not_found} = MCPO.cancel("missing")
-      assert {:ok, %{status: :completed}} = MCPO.status(task_id)
+      assert {:error, :terminal} = MCPOban.cancel(task_id)
+      assert {:error, :not_found} = MCPOban.cancel("missing")
+      assert {:ok, %{status: :completed}} = MCPOban.status(task_id)
     end
   end
 
   describe "await/2" do
     test "returns the task when it is done" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 1})
       drain()
 
-      assert {:ok, %Task{status: :completed}} = MCPO.await(task_id)
+      assert {:ok, %Task{status: :completed}} = MCPOban.await(task_id)
     end
 
     test "returns a timeout for a working task and does not cancel it" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 1})
 
-      assert {:error, :timeout} = MCPO.await(task_id, timeout: 50, interval: 10)
-      assert {:ok, %{status: :working}} = MCPO.status(task_id)
-      assert {:error, :not_found} = MCPO.await("missing")
+      assert {:error, :timeout} = MCPOban.await(task_id, timeout: 50, interval: 10)
+      assert {:ok, %{status: :working}} = MCPOban.status(task_id)
+      assert {:error, :not_found} = MCPOban.await("missing")
     end
   end
 
   describe "status/2" do
     test "returns not found for an unknown task" do
-      assert {:error, :not_found} = MCPO.status("missing")
+      assert {:error, :not_found} = MCPOban.status("missing")
     end
 
     test "fails a working task when its job is discarded without an event" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1})
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
 
       Repo.update_all(where(Oban.Job, id: ^job_id),
         set: [state: "discarded", errors: [%{"attempt" => 1, "at" => "now", "error" => "lost"}]]
       )
 
-      assert {:ok, %{status: :failed, error: %{"message" => "lost"}}} = MCPO.status(task_id)
+      assert {:ok, %{status: :failed, error: %{"message" => "lost"}}} = MCPOban.status(task_id)
     end
 
     test "cancels a working task when its job is deleted" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 1})
       Repo.delete_all(Oban.Job)
 
-      assert {:ok, %{status: :cancelled}} = MCPO.status(task_id)
+      assert {:ok, %{status: :cancelled}} = MCPOban.status(task_id)
     end
   end
 
   describe "review fixes" do
     test "a read between the job ack and the telemetry event does not lose the result" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1})
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
 
       Repo.update_all(where(Oban.Job, id: ^job_id),
         set: [state: "completed", completed_at: DateTime.utc_now()]
       )
 
-      assert {:ok, %{status: :working}} = MCPO.status(task_id)
+      assert {:ok, %{status: :working}} = MCPOban.status(task_id)
 
       job = Repo.get(Oban.Job, job_id)
 
-      MCPO.Telemetry.handle_event(
+      MCPOban.Telemetry.handle_event(
         [:oban, :job, :stop],
         %{},
         %{job: job, state: :success, conf: Oban.config(), result: {:ok, %{"value" => 1}}},
         nil
       )
 
-      assert {:ok, %{status: :completed, result: %{"value" => 1}}} = MCPO.status(task_id)
+      assert {:ok, %{status: :completed, result: %{"value" => 1}}} = MCPOban.status(task_id)
     end
 
     test "a completed job without a saved result completes the task after the grace period" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1})
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
 
       Repo.update_all(where(Oban.Job, id: ^job_id),
         set: [state: "completed", completed_at: DateTime.add(DateTime.utc_now(), -10, :second)]
       )
 
-      assert {:ok, %{status: :completed, result: nil}} = MCPO.status(task_id)
+      assert {:ok, %{status: :completed, result: nil}} = MCPOban.status(task_id)
     end
 
     test "a duplicate unique job is rejected and no task is saved" do
-      assert {:ok, %Task{}} = MCPO.enqueue(MCPO.Test.UniqueWorker, %{q: 1}, owner: %{"u" => 1})
+      assert {:ok, %Task{}} =
+               MCPOban.enqueue(MCPOban.Test.UniqueWorker, %{q: 1}, owner: %{"u" => 1})
 
       assert {:error, :job_conflict} =
-               MCPO.enqueue(MCPO.Test.UniqueWorker, %{q: 1}, owner: %{"u" => 2})
+               MCPOban.enqueue(MCPOban.Test.UniqueWorker, %{q: 1}, owner: %{"u" => 2})
 
       assert Repo.aggregate(Task, :count) == 1
       assert Repo.aggregate(Oban.Job, :count) == 1
     end
 
     test "a result that cannot be saved as JSON fails the task" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(MCPO.Test.TupleWorker, %{})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(MCPOban.Test.TupleWorker, %{})
 
       drain()
 
@@ -301,7 +302,7 @@ defmodule MCPOTest do
     end
 
     test "a result with a NUL character fails the task" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(MCPO.Test.NulWorker, %{})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(MCPOban.Test.NulWorker, %{})
 
       drain()
 
@@ -314,11 +315,11 @@ defmodule MCPOTest do
 
     test "a database error while saving the result leaves the task working" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1})
+        MCPOban.enqueue(SuccessWorker, %{value: 1})
 
-      conf = %{Oban.config() | repo: MCPO.Test.FlakyRepo}
+      conf = %{Oban.config() | repo: MCPOban.Test.FlakyRepo}
 
-      MCPO.Telemetry.handle_event(
+      MCPOban.Telemetry.handle_event(
         [:oban, :job, :stop],
         %{},
         %{
@@ -334,21 +335,21 @@ defmodule MCPOTest do
     end
 
     test "enqueue works with Oban in inline testing mode" do
-      start_supervised!({Oban, name: MCPO.Test.InlineOban, repo: Repo, testing: :inline})
+      start_supervised!({Oban, name: MCPOban.Test.InlineOban, repo: Repo, testing: :inline})
 
       assert {:ok, %Task{task_id: task_id}} =
-               MCPO.enqueue(SuccessWorker, %{value: 5}, oban: MCPO.Test.InlineOban)
+               MCPOban.enqueue(SuccessWorker, %{value: 5}, oban: MCPOban.Test.InlineOban)
 
       assert {:ok, %{status: :completed, result: %{"value" => 5}}} =
-               MCPO.status(task_id, oban: MCPO.Test.InlineOban)
+               MCPOban.status(task_id, oban: MCPOban.Test.InlineOban)
     end
 
     test "a suspended job is working and can be cancelled" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1}, job: [state: "suspended"])
+        MCPOban.enqueue(SuccessWorker, %{value: 1}, job: [state: "suspended"])
 
-      assert {:ok, %{status: :working}} = MCPO.status(task_id)
-      assert {:ok, %Task{status: :cancelled}} = MCPO.cancel(task_id)
+      assert {:ok, %{status: :working}} = MCPOban.status(task_id)
+      assert {:ok, %Task{status: :cancelled}} = MCPOban.cancel(task_id)
       assert %Oban.Job{state: "cancelled"} = Repo.get(Oban.Job, job_id)
     end
   end
@@ -356,26 +357,26 @@ defmodule MCPOTest do
   describe "open findings" do
     test "an existing task_id with another owner or worker is not returned" do
       {:ok, %Task{id: id}} =
-        MCPO.enqueue(SuccessWorker, %{value: 1}, task_id: "1", owner: %{user: 1})
+        MCPOban.enqueue(SuccessWorker, %{value: 1}, task_id: "1", owner: %{user: 1})
 
       assert {:error, :already_exists} =
-               MCPO.enqueue(SuccessWorker, %{value: 1}, task_id: "1", owner: %{user: 2})
+               MCPOban.enqueue(SuccessWorker, %{value: 1}, task_id: "1", owner: %{user: 2})
 
       assert {:error, :already_exists} =
-               MCPO.enqueue(PlainWorker, %{}, task_id: "1", owner: %{user: 1})
+               MCPOban.enqueue(PlainWorker, %{}, task_id: "1", owner: %{user: 1})
 
       assert {:ok, %Task{id: ^id}} =
-               MCPO.enqueue(SuccessWorker, %{value: 1}, task_id: "1", owner: %{"user" => 1})
+               MCPOban.enqueue(SuccessWorker, %{value: 1}, task_id: "1", owner: %{"user" => 1})
 
       assert Repo.aggregate(Oban.Job, :count) == 1
     end
 
     test "a failed attempt of a cancelled task does not run again" do
       {:ok, %Task{task_id: task_id, oban_job_id: job_id}} =
-        MCPO.enqueue(FlakyWorker, %{succeed_on: 3})
+        MCPOban.enqueue(FlakyWorker, %{succeed_on: 3})
 
       Repo.update_all(where(Oban.Job, id: ^job_id), set: [state: "executing"])
-      {:ok, _task} = MCPO.cancel(task_id)
+      {:ok, _task} = MCPOban.cancel(task_id)
       Repo.update_all(where(Oban.Job, id: ^job_id), set: [state: "available"])
 
       assert %{failure: 1} = Oban.drain_queue(queue: :default)
@@ -384,7 +385,7 @@ defmodule MCPOTest do
       assert %{success: 0, failure: 0} =
                Oban.drain_queue(queue: :default, with_scheduled: true, with_recursion: true)
 
-      assert {:ok, %{status: :cancelled}} = MCPO.status(task_id)
+      assert {:ok, %{status: :cancelled}} = MCPOban.status(task_id)
     end
 
     test "a result with a content key that is not a list is wrapped" do
@@ -393,43 +394,43 @@ defmodule MCPOTest do
       assert %{
                "content" => [%{"type" => "text", "text" => ~s({"content":"report text"})}],
                "structuredContent" => %{"content" => "report text"}
-             } = MCPO.ExMCP.Store.call_tool_result(task)
+             } = MCPOban.ExMCP.Store.call_tool_result(task)
 
       blocks = %{"content" => [%{"type" => "text", "text" => "hi"}]}
 
       assert ^blocks =
-               MCPO.ExMCP.Store.call_tool_result(%Task{status: :completed, result: blocks})
+               MCPOban.ExMCP.Store.call_tool_result(%Task{status: :completed, result: blocks})
     end
   end
 
   describe "races" do
     test "a cancel after completion does nothing" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 1})
       drain()
 
-      assert {:error, :terminal} = MCPO.cancel(task_id)
-      assert {:ok, %{status: :completed}} = MCPO.status(task_id)
+      assert {:error, :terminal} = MCPOban.cancel(task_id)
+      assert {:ok, %{status: :completed}} = MCPOban.status(task_id)
     end
 
     test "a discard after cancel keeps the task cancelled" do
-      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} = MCPO.enqueue(FailingWorker, %{})
+      {:ok, %Task{task_id: task_id, oban_job_id: job_id}} = MCPOban.enqueue(FailingWorker, %{})
       Repo.update_all(where(Oban.Job, id: ^job_id), set: [state: "executing"])
-      {:ok, _task} = MCPO.cancel(task_id)
+      {:ok, _task} = MCPOban.cancel(task_id)
 
       conf = Oban.config()
-      assert :noop = MCPO.transition(conf, task_id, :failed, error: %{"message" => "late"})
-      assert {:ok, %Task{status: :cancelled, error: nil}} = MCPO.get(task_id)
+      assert :noop = MCPOban.transition(conf, task_id, :failed, error: %{"message" => "late"})
+      assert {:ok, %Task{status: :cancelled, error: nil}} = MCPOban.get(task_id)
     end
 
     test "one change wins when complete, fail and cancel run at the same time" do
-      {:ok, %Task{task_id: task_id}} = MCPO.enqueue(SuccessWorker, %{value: 1})
+      {:ok, %Task{task_id: task_id}} = MCPOban.enqueue(SuccessWorker, %{value: 1})
       conf = Oban.config()
 
       results =
         [
-          fn -> MCPO.transition(conf, task_id, :completed, result: %{"value" => 1}) end,
-          fn -> MCPO.transition(conf, task_id, :failed, error: %{"message" => "x"}) end,
-          fn -> MCPO.cancel(task_id) end
+          fn -> MCPOban.transition(conf, task_id, :completed, result: %{"value" => 1}) end,
+          fn -> MCPOban.transition(conf, task_id, :failed, error: %{"message" => "x"}) end,
+          fn -> MCPOban.cancel(task_id) end
         ]
         |> Enum.map(&Elixir.Task.async/1)
         |> Elixir.Task.await_many()
@@ -437,24 +438,24 @@ defmodule MCPOTest do
       winners = Enum.count(results, &match?({:ok, _task}, &1))
 
       assert winners == 1
-      assert {:ok, %Task{status: status}} = MCPO.get(task_id)
+      assert {:ok, %Task{status: status}} = MCPOban.get(task_id)
       assert status in [:completed, :failed, :cancelled]
     end
   end
 
-  describe "MCPO.Cleaner" do
+  describe "MCPOban.Cleaner" do
     test "deletes old terminal tasks and keeps working tasks" do
-      {:ok, %Task{task_id: done}} = MCPO.enqueue(SuccessWorker, %{value: 1})
-      {:ok, %Task{task_id: running}} = MCPO.enqueue(FlakyWorker, %{succeed_on: 3})
+      {:ok, %Task{task_id: done}} = MCPOban.enqueue(SuccessWorker, %{value: 1})
+      {:ok, %Task{task_id: running}} = MCPOban.enqueue(FlakyWorker, %{succeed_on: 3})
       drain_once = Oban.drain_queue(queue: :default)
       assert %{success: 1, failure: 1} = drain_once
 
       old = DateTime.add(DateTime.utc_now(), -2, :day)
       Repo.update_all(Task, set: [updated_at: old])
 
-      assert {:ok, 1} = perform_job(MCPO.Cleaner, %{})
-      assert {:error, :not_found} = MCPO.status(done)
-      assert {:ok, %{status: :working}} = MCPO.status(running)
+      assert {:ok, 1} = perform_job(MCPOban.Cleaner, %{})
+      assert {:error, :not_found} = MCPOban.status(done)
+      assert {:ok, %{status: :working}} = MCPOban.status(running)
     end
   end
 end

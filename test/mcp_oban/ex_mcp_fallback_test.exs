@@ -1,12 +1,12 @@
-defmodule MCPO.ExMCPFallbackTest do
-  use MCPO.DataCase
+defmodule MCPOban.ExMCPFallbackTest do
+  use MCPOban.DataCase
 
-  alias MCPO.Task
+  alias MCPOban.Task
 
   defp start_client(protocol_mode, capabilities) do
     {:ok, server} =
       ExMCP.Server.HandlerServer.start_link(
-        handler: MCPO.Test.MCPServer,
+        handler: MCPOban.Test.MCPServer,
         transport: :beam,
         protocol_mode: protocol_mode
       )
@@ -39,7 +39,7 @@ defmodule MCPO.ExMCPFallbackTest do
   end
 
   test "a duplicate call through ExMCP finds the unique job" do
-    {:ok, _task} = MCPO.enqueue(MCPO.Test.UniqueWorker, %{"q" => 1})
+    {:ok, _task} = MCPOban.enqueue(MCPOban.Test.UniqueWorker, %{"q" => 1})
     client = start_client(:prefer_modern, %{})
 
     assert {:ok, %{"isError" => true, "content" => [%{"text" => text}]}} =
@@ -85,24 +85,24 @@ defmodule MCPO.ExMCPFallbackTest do
   end
 
   test "a duplicate unique job returns an error result" do
-    {:ok, _task} = MCPO.enqueue(MCPO.Test.UniqueWorker, %{"q" => 1})
-    specs = MCPO.ExMCP.__tools__([{MCPO.Test.UniqueWorker, name: "unique_report"}])
+    {:ok, _task} = MCPOban.enqueue(MCPOban.Test.UniqueWorker, %{"q" => 1})
+    specs = MCPOban.ExMCP.__tools__([{MCPOban.Test.UniqueWorker, name: "unique_report"}])
 
     assert {:ok, %{"isError" => true, "content" => [%{"text" => text}]}, :state} =
-             MCPO.ExMCP.__call_tool__(specs, "unique_report", %{"q" => 1}, :state, [])
+             MCPOban.ExMCP.__call_tool__(specs, "unique_report", %{"q" => 1}, :state, [])
 
     assert text == "A job with the same arguments already exists."
   end
 
   test "a task that finished just before the timeout cancel returns its real result" do
-    {:ok, %Task{task_id: done}} = MCPO.enqueue(MCPO.Test.SuccessWorker, %{value: 3})
-    {:ok, %Task{task_id: failed}} = MCPO.enqueue(MCPO.Test.FailingWorker, %{})
+    {:ok, %Task{task_id: done}} = MCPOban.enqueue(MCPOban.Test.SuccessWorker, %{value: 3})
+    {:ok, %Task{task_id: failed}} = MCPOban.enqueue(MCPOban.Test.FailingWorker, %{})
     drain()
 
-    assert %{"structuredContent" => %{"value" => 3}} = MCPO.ExMCP.__timed_out__(done, 100, [])
+    assert %{"structuredContent" => %{"value" => 3}} = MCPOban.ExMCP.__timed_out__(done, 100, [])
 
     assert %{"isError" => true, "content" => [%{"text" => text}]} =
-             MCPO.ExMCP.__timed_out__(failed, 100, [])
+             MCPOban.ExMCP.__timed_out__(failed, 100, [])
 
     assert text =~ "boom"
   end

@@ -1,4 +1,4 @@
-# MCPO
+# MCPOban
 
 Runs MCP tool calls as [Oban](https://hex.pm/packages/oban) jobs.
 
@@ -13,47 +13,47 @@ An MCP client calls a tool. The server gives back a task ID at once, and Oban do
 
 A retry does not make a task fail. The task fails only when Oban stops retrying the job.
 
-MCPO does not implement the MCP protocol. It includes an adapter for [ExMCP](https://hex.pm/packages/ex_mcp). The core API does not depend on an MCP library.
+MCPOban does not implement the MCP protocol. It includes an adapter for [ExMCP](https://hex.pm/packages/ex_mcp). The core API does not depend on an MCP library.
 
 ## Installation
 
 ```elixir
 def deps do
   [
-    {:mcpo, "~> 0.1"},
+    {:mcp_oban, "~> 0.1"},
     # Optional, for the ExMCP adapter:
     {:ex_mcp, "~> 1.5"}
   ]
 end
 ```
 
-MCPO needs [Oban](https://hexdocs.pm/oban). Set up Oban first, then run:
+MCPOban needs [Oban](https://hexdocs.pm/oban). Set up Oban first, then run:
 
 ```sh
-mix mcpo.install
+mix mcp_oban.install
 ```
 
-It creates a migration for the `mcpo_tasks` table and, with `ex_mcp`, an MCP server module. Then it prints the next steps. Options: `--repo MyApp.Repo`, `--server MyApp.MCPServer`, `--no-server`, and `--prefix private`.
+It creates a migration for the `mcp_oban_tasks` table and, with `ex_mcp`, an MCP server module. Then it prints the next steps. Options: `--repo MyApp.Repo`, `--server MyApp.MCPServer`, `--no-server`, and `--prefix private`.
 
 ### Manual setup
 
-MCPO uses the repo of your Oban instance. Add a migration:
+MCPOban uses the repo of your Oban instance. Add a migration:
 
 ```elixir
-defmodule MyApp.Repo.Migrations.AddMCPOTasks do
+defmodule MyApp.Repo.Migrations.AddMCPObanTasks do
   use Ecto.Migration
 
-  def up, do: MCPO.Migration.up()
-  def down, do: MCPO.Migration.down()
+  def up, do: MCPOban.Migration.up()
+  def down, do: MCPOban.Migration.down()
 end
 ```
 
-If Oban uses a prefix, pass the same prefix: `MCPO.Migration.up(prefix: "private")`.
+If Oban uses a prefix, pass the same prefix: `MCPOban.Migration.up(prefix: "private")`.
 
 If your Oban instance does not have the name `Oban`, set the name:
 
 ```elixir
-config :mcpo, oban: MyApp.Oban
+config :mcp_oban, oban: MyApp.Oban
 ```
 
 ## Write a worker
@@ -80,11 +80,11 @@ The return value of `perform/1` becomes the task result:
 
 The result is stored as JSON, so atom keys come back as strings. The result must be JSON-safe: for example, no tuples or PIDs.
 
-> **Note:** Oban marks the job `completed` first, and then MCPO saves the result from the Oban telemetry event. Between these two steps the task stays `working`. If the result is not saved within 5 seconds (for example, the node stopped), the task becomes `completed` with no result. Change the time with `config :mcpo, result_grace_period: 5_000`.
+> **Note:** Oban marks the job `completed` first, and then MCPOban saves the result from the Oban telemetry event. Between these two steps the task stays `working`. If the result is not saved within 5 seconds (for example, the node stopped), the task becomes `completed` with no result. Change the time with `config :mcp_oban, result_grace_period: 5_000`.
 >
 > A result that cannot be saved as JSON makes the task `failed`.
 >
-> When Oban deletes a job before MCPO sees its final state (for example, the Pruner removed it), the task becomes `cancelled`. Keep the Pruner `max_age` longer than the time clients take to read a result.
+> When Oban deletes a job before MCPOban sees its final state (for example, the Pruner removed it), the task becomes `cancelled`. Keep the Pruner `max_age` longer than the time clients take to read a result.
 >
 > Workers with Oban `unique:` options: a duplicate job is rejected with `{:error, :job_conflict}`. Two tasks never share one job. With Oban's default unique states, a job that has already completed within the unique period also counts as a duplicate.
 
@@ -94,7 +94,7 @@ List your workers. Each worker becomes a tool:
 
 ```elixir
 defmodule MyApp.MCPServer do
-  use MCPO.ExMCP,
+  use MCPOban.ExMCP,
     tools: [
       MyApp.Workers.GenerateReport,
       {MyApp.Workers.SendEmail,
@@ -108,7 +108,7 @@ defmodule MyApp.MCPServer do
 end
 ```
 
-A worker can describe itself with `use MCPO.Tool`. The `@moduledoc` text becomes the tool description:
+A worker can describe itself with `use MCPOban.Tool`. The `@moduledoc` text becomes the tool description:
 
 ```elixir
 defmodule MyApp.Workers.GenerateReport do
@@ -118,7 +118,7 @@ defmodule MyApp.Workers.GenerateReport do
 
   use Oban.Worker, queue: :reports
 
-  use MCPO.Tool,
+  use MCPOban.Tool,
     input_schema: %{
       "type" => "object",
       "properties" => %{"steps" => %{"type" => "integer"}},
@@ -127,13 +127,13 @@ defmodule MyApp.Workers.GenerateReport do
 end
 ```
 
-`use MCPO.Tool` reads `@moduledoc` when the worker compiles. So the description is there also in a release, where `mix release` removes the docs from the compiled files.
+`use MCPOban.Tool` reads `@moduledoc` when the worker compiles. So the description is there also in a release, where `mix release` removes the docs from the compiled files.
 
 Each value comes from the first place that has it:
 
 1. The options in the `tools:` list
-2. `use MCPO.Tool` options (`:name`, `:description`, `:input_schema`)
-3. The worker's `@moduledoc` (description only, with `use MCPO.Tool`)
+2. `use MCPOban.Tool` options (`:name`, `:description`, `:input_schema`)
+3. The worker's `@moduledoc` (description only, with `use MCPOban.Tool`)
 4. The `args_schema` of an Oban Pro worker (input schema only, see below)
 5. The default:
 
@@ -143,17 +143,17 @@ Each value comes from the first place that has it:
 | `:description`  | `"Runs MyApp.Workers.SendEmail as a background job."`          |
 | `:input_schema` | `%{"type" => "object"}` (any arguments)                        |
 
-The tool arguments become the job args. MCPO checks them against the input schema first. Invalid arguments get back a tool result with `"isError": true` and a list of the problems, and no job starts. The AI model can then correct its call. An invalid input schema stops the build with an error.
+The tool arguments become the job args. MCPOban checks them against the input schema first. Invalid arguments get back a tool result with `"isError": true` and a list of the problems, and no job starts. The AI model can then correct its call. An invalid input schema stops the build with an error.
 
 ### Oban Pro workers
 
-An Oban Pro worker with `args_schema` needs no `input_schema`. MCPO builds it from the fields:
+An Oban Pro worker with `args_schema` needs no `input_schema`. MCPOban builds it from the fields:
 
 ```elixir
 defmodule MyApp.Workers.UpdateOffice do
   @moduledoc "Updates an office."
   use Oban.Pro.Worker
-  use MCPO.Tool
+  use MCPOban.Tool
 
   args_schema do
     field :id, :id, required: true
@@ -183,9 +183,9 @@ end
 | `embeds_one`, `embeds_many`                      | `object`, or `array` of `object`                      |
 | `:term`                                          | any value                                             |
 
-`required: true` and `default:` are kept. Unknown keys are not allowed, as in Oban Pro. MCPO does not depend on Oban Pro: it reads the schema from `__args_schema__/0`, which Oban Pro defines. This function is not documented by Oban Pro, so a future Pro version can change it. MCPO was checked with Oban Pro 1.5 to 1.7.10.
+`required: true` and `default:` are kept. Unknown keys are not allowed, as in Oban Pro. MCPOban does not depend on Oban Pro: it reads the schema from `__args_schema__/0`, which Oban Pro defines. This function is not documented by Oban Pro, so a future Pro version can change it. MCPOban was checked with Oban Pro 1.5 to 1.7.10.
 
-`use MCPO.ExMCP` is `use ExMCP.Server.Handler` with the MCPO task store. It defines `handle_initialize/2`, `handle_list_tools/2`, and `handle_call_tool/3`. Other handler options are passed on to ExMCP. Set `server_info: %{"name" => ..., "version" => ...}` to change the server name.
+`use MCPOban.ExMCP` is `use ExMCP.Server.Handler` with the MCPOban task store. It defines `handle_initialize/2`, `handle_list_tools/2`, and `handle_call_tool/3`. Other handler options are passed on to ExMCP. Set `server_info: %{"name" => ..., "version" => ...}` to change the server name.
 
 To add a tool that is not an Oban job, define `handle_call_tool/3` and call `super` for the other tools:
 
@@ -198,7 +198,7 @@ def handle_call_tool(name, arguments, state), do: super(name, arguments, state)
 
 Also define `handle_list_tools/2` and add your tool to the list from `super`. `create_task/4` starts a job from your own `handle_call_tool/3`.
 
-ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPO table:
+ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPOban table:
 
 - A completed task returns its result as a tool call result. The result map is in `structuredContent`, and as JSON text in `content`. If your result already has a `"content"` list of content blocks, it is sent without change.
 - A failed task returns a JSON-RPC error.
@@ -206,14 +206,14 @@ ExMCP then answers `tasks/get` and `tasks/cancel` from the MCPO table:
 
 ### Clients without tasks
 
-Many clients do not support the MCP Tasks extension yet. For example, the MCP Inspector uses the TypeScript SDK, and its latest protocol is `2025-11-25`. For these clients, MCPO waits for the Oban job and returns the tool result directly. The work still runs in Oban, with retries.
+Many clients do not support the MCP Tasks extension yet. For example, the MCP Inspector uses the TypeScript SDK, and its latest protocol is `2025-11-25`. For these clients, MCPOban waits for the Oban job and returns the tool result directly. The work still runs in Oban, with retries.
 
 - A failed or cancelled job returns a tool result with `"isError": true`.
-- If the job does not finish in `:wait_timeout` (9 seconds by default), MCPO cancels the task and returns an error result.
+- If the job does not finish in `:wait_timeout` (9 seconds by default), MCPOban cancels the task and returns an error result.
 - While the call waits, it is blocked. Over HTTP, ExMCP stops a handler call after `:handler_call_timeout` (10 seconds by default). For longer jobs, raise both values:
 
   ```elixir
-  use MCPO.ExMCP, task_store_opts: [wait_timeout: 60_000]
+  use MCPOban.ExMCP, task_store_opts: [wait_timeout: 60_000]
 
   # and on the plug:
   Plug.Cowboy.http(ExMCP.HttpPlug, [handler: MyApp.MCPServer, handler_call_timeout: 65_000], port: 4000)
@@ -225,9 +225,9 @@ Listed tools have `"execution" => %{"taskSupport" => "optional"}`, so both kinds
 
 ### Limits
 
-- MCPO supports the MCP Tasks extension (spec 2026-07-28). Older clients get the direct result described above, not a task.
+- MCPOban supports the MCP Tasks extension (spec 2026-07-28). Older clients get the direct result described above, not a task.
 - The `input_required` status is not supported.
-- MCPO does not send `notifications/tasks`, so clients must poll with `tasks/get`.
+- MCPOban does not send `notifications/tasks`, so clients must poll with `tasks/get`.
 
 ## Use with FastestMCP
 
@@ -236,7 +236,7 @@ Add `{:fastest_mcp, "~> 0.3"}` to your deps. Then add your workers as tools:
 ```elixir
 server =
   FastestMCP.server("reports")
-  |> MCPO.FastestMCP.add_tools([
+  |> MCPOban.FastestMCP.add_tools([
     MyApp.Workers.GenerateReport,
     {MyApp.Workers.SendEmail, description: "Sends an email."}
   ])
@@ -247,31 +247,31 @@ The tool name, description and input schema follow the same rules as with ExMCP.
 Each tool call inserts an Oban job and waits for it. FastestMCP decides how the client gets the result:
 
 - A client with MCP Tasks gets a task at once. FastestMCP supports both task versions, `2025-11-25` and the `2026-07-28` extension, so clients with the current TypeScript SDK also get real tasks.
-- A client without tasks waits for the result. If the job does not finish in `:wait_timeout` (9 seconds by default), MCPO cancels it and returns an error result.
+- A client without tasks waits for the result. If the job does not finish in `:wait_timeout` (9 seconds by default), MCPOban cancels it and returns an error result.
 - A failed or cancelled job returns a tool result with `isError: true`.
 
-When FastestMCP cancels a task, it stops the waiting tool process. MCPO then cancels the MCPO task and its job.
+When FastestMCP cancels a task, it stops the waiting tool process. MCPOban then cancels the MCPOban task and its job.
 
 Options of `add_tools/3`: `:oban`, `:job`, `:kill`, `:wait_timeout`, and `:task` (the FastestMCP task option, default `[mode: :optional]`).
 
-Limit: FastestMCP keeps its tasks in memory by default. After a restart, clients cannot read FastestMCP tasks from before the restart, even though the Oban job and the MCPO task still exist.
+Limit: FastestMCP keeps its tasks in memory by default. After a restart, clients cannot read FastestMCP tasks from before the restart, even though the Oban job and the MCPOban task still exist.
 
 ## Use without an MCP library
 
 ```elixir
-{:ok, %MCPO.Task{task_id: task_id}} =
-  MCPO.enqueue(MyApp.Workers.GenerateReport, %{report_id: 1}, owner: %{"user_id" => 7})
+{:ok, %MCPOban.Task{task_id: task_id}} =
+  MCPOban.enqueue(MyApp.Workers.GenerateReport, %{report_id: 1}, owner: %{"user_id" => 7})
 
-MCPO.status(task_id)
+MCPOban.status(task_id)
 #=> {:ok, %{status: :working}}
 #=> {:ok, %{status: :completed, result: %{"url" => "..."}}}
 #=> {:ok, %{status: :failed, error: %{"message" => "..."}}}
 #=> {:ok, %{status: :cancelled}}
 
-MCPO.cancel(task_id)
+MCPOban.cancel(task_id)
 ```
 
-To make an adapter for a different MCP server, use `MCPO.enqueue/3`, `MCPO.get/2`, and `MCPO.cancel/2`. For clients that cannot poll, `MCPO.await/2` waits until the task is done.
+To make an adapter for a different MCP server, use `MCPOban.enqueue/3`, `MCPOban.get/2`, and `MCPOban.cancel/2`. For clients that cannot poll, `MCPOban.await/2` waits until the task is done.
 
 ### Duplicate requests
 
@@ -279,15 +279,15 @@ Give the MCP task ID as `task_id:`. If a task with this ID already exists for th
 
 ## Cancellation
 
-`MCPO.cancel/2` sets the task to `cancelled` at once.
+`MCPOban.cancel/2` sets the task to `cancelled` at once.
 
 - **The job waits to run:** Oban cancels the job.
-- **The job is running:** Oban does not stop it. The BEAM cannot safely stop any code at any point, so the worker must stop by itself. A long worker should check `MCPO.cancelled?/1` between steps:
+- **The job is running:** Oban does not stop it. The BEAM cannot safely stop any code at any point, so the worker must stop by itself. A long worker should check `MCPOban.cancelled?/1` between steps:
 
   ```elixir
   def perform(%Oban.Job{} = job) do
     Enum.reduce_while(steps(), :ok, fn step, :ok ->
-      if MCPO.cancelled?(job) do
+      if MCPOban.cancelled?(job) do
         {:halt, {:cancel, :mcp_task_cancelled}}
       else
         do_step(step)
@@ -297,11 +297,11 @@ Give the MCP task ID as `task_id:`. If a task with this ID already exists for th
   end
   ```
 
-  If the worker does not stop, it runs to the end, but its result is not saved. The task stays `cancelled`. If the attempt fails or snoozes, MCPO cancels the job, so Oban does not run it again.
+  If the worker does not stop, it runs to the end, but its result is not saved. The task stays `cancelled`. If the attempt fails or snoozes, MCPOban cancels the job, so Oban does not run it again.
 
-- **Kill the job:** `MCPO.cancel(task_id, kill: true)` makes Oban kill a running job. The process stops at once and cannot clean up.
+- **Kill the job:** `MCPOban.cancel(task_id, kill: true)` makes Oban kill a running job. The process stops at once and cannot clean up.
 
-With ExMCP, use `use MCPO.ExMCP, task_store_opts: [kill: true]` to kill running jobs on `tasks/cancel`.
+With ExMCP, use `use MCPOban.ExMCP, task_store_opts: [kill: true]` to kill running jobs on `tasks/cancel`.
 
 ## Races
 
@@ -309,14 +309,14 @@ Each status change is one database update with the condition `WHERE status = 'wo
 
 ## Telemetry
 
-MCPO sends these events:
+MCPOban sends these events:
 
 | Event                            | Measurements   |
 | -------------------------------- | -------------- |
-| `[:mcpo, :task, :started]`   | `:system_time` |
-| `[:mcpo, :task, :completed]` | `:duration`    |
-| `[:mcpo, :task, :failed]`    | `:duration`    |
-| `[:mcpo, :task, :cancelled]` | `:duration`    |
+| `[:mcp_oban, :task, :started]`   | `:system_time` |
+| `[:mcp_oban, :task, :completed]` | `:duration`    |
+| `[:mcp_oban, :task, :failed]`    | `:duration`    |
+| `[:mcp_oban, :task, :cancelled]` | `:duration`    |
 
 `:duration` is the time from the task start to the status change, in native time units. The metadata of all events is `:task_id`, `:oban_job_id`, and `:worker`.
 
@@ -324,16 +324,16 @@ For retries, attempts, and queue times, use the Oban telemetry events.
 
 ## Cleanup
 
-`MCPO.Cleaner` deletes completed, failed, and cancelled tasks that are older than the retention time. It never deletes `working` tasks. Run it with the Oban Cron plugin:
+`MCPOban.Cleaner` deletes completed, failed, and cancelled tasks that are older than the retention time. It never deletes `working` tasks. Run it with the Oban Cron plugin:
 
 ```elixir
 config :my_app, Oban,
-  plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPO.Cleaner}]}]
+  plugins: [{Oban.Plugins.Cron, crontab: [{"@hourly", MCPOban.Cleaner}]}]
 
-config :mcpo, task_retention: :timer.hours(24)
+config :mcp_oban, task_retention: :timer.hours(24)
 ```
 
-The Cleaner job goes to the `:default` queue. If your app does not run that queue, set a queue that it runs, for example `{"@hourly", MCPO.Cleaner, queue: :maintenance}`. Otherwise old tasks are never deleted.
+The Cleaner job goes to the `:default` queue. If your app does not run that queue, set a queue that it runs, for example `{"@hourly", MCPOban.Cleaner, queue: :maintenance}`. Otherwise old tasks are never deleted.
 
 ## Example
 

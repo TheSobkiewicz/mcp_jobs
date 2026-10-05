@@ -1,9 +1,9 @@
-defmodule MCPO.Repository do
+defmodule MCPOban.Repository do
   @moduledoc false
 
   import Ecto.Query
 
-  alias MCPO.Task
+  alias MCPOban.Task
   alias Oban.Config
   alias Oban.Repo
 

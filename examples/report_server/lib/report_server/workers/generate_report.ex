@@ -5,7 +5,7 @@ defmodule ReportServer.Workers.GenerateReport do
 
   use Oban.Worker, queue: :reports, max_attempts: 3
 
-  use MCPO.Tool,
+  use MCPOban.Tool,
     input_schema: %{
       "type" => "object",
       "properties" => %{"steps" => %{"type" => "integer", "minimum" => 1}},
@@ -15,7 +15,7 @@ defmodule ReportServer.Workers.GenerateReport do
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"steps" => steps}} = job) do
     Enum.reduce_while(1..steps, :ok, fn _step, :ok ->
-      if MCPO.cancelled?(job) do
+      if MCPOban.cancelled?(job) do
         {:halt, {:cancel, :mcp_task_cancelled}}
       else
         Process.sleep(200)

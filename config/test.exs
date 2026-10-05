@@ -1,9 +1,9 @@
 import Config
 
-config :mcpo, ecto_repos: [MCPO.Test.Repo]
+config :mcp_oban, ecto_repos: [MCPOban.Test.Repo]
 
-config :mcpo, MCPO.Test.Repo,
-  database: "mcpo_test",
+config :mcp_oban, MCPOban.Test.Repo,
+  database: "mcp_oban_test",
   hostname: "localhost",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 10

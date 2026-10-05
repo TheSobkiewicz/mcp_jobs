@@ -1,4 +1,4 @@
-defmodule MCPO.Tool do
+defmodule MCPOban.Tool do
   @moduledoc """
   Describes an Oban worker as an MCP tool.
 
@@ -8,7 +8,7 @@ defmodule MCPO.Tool do
         \"\"\"
 
         use Oban.Worker, queue: :reports
-        use MCPO.Tool, input_schema: %{"type" => "object", "required" => ["report_id"]}
+        use MCPOban.Tool, input_schema: %{"type" => "object", "required" => ["report_id"]}
       end
 
   The `@moduledoc` text becomes the tool description. The text is read when the
@@ -20,14 +20,14 @@ defmodule MCPO.Tool do
     * `:description`: the tool description, in place of `@moduledoc`.
     * `:input_schema`: the JSON Schema of the tool arguments.
 
-  The options in the `tools:` list of `MCPO.ExMCP` override these values.
+  The options in the `tools:` list of `MCPOban.ExMCP` override these values.
   """
 
   @doc false
   defmacro __using__(opts) do
     quote do
-      @mcpo_tool_opts unquote(opts)
-      @before_compile MCPO.Tool
+      @mcp_oban_tool_opts unquote(opts)
+      @before_compile MCPOban.Tool
     end
   end
 
@@ -41,8 +41,8 @@ defmodule MCPO.Tool do
 
     quote do
       @doc false
-      def __mcpo_tool__ do
-        Keyword.put_new(@mcpo_tool_opts, :description, unquote(description))
+      def __mcp_oban_tool__ do
+        Keyword.put_new(@mcp_oban_tool_opts, :description, unquote(description))
       end
     end
   end
@@ -50,8 +50,8 @@ defmodule MCPO.Tool do
   @doc false
   @spec options(module()) :: keyword()
   def options(worker) do
-    if Code.ensure_loaded?(worker) and function_exported?(worker, :__mcpo_tool__, 0) do
-      Enum.reject(worker.__mcpo_tool__(), &match?({_key, nil}, &1))
+    if Code.ensure_loaded?(worker) and function_exported?(worker, :__mcp_oban_tool__, 0) do
+      Enum.reject(worker.__mcp_oban_tool__(), &match?({_key, nil}, &1))
     else
       []
     end

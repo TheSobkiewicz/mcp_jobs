@@ -1,12 +1,12 @@
 if Code.ensure_loaded?(ExMCP.Tasks.Store) do
-  defmodule MCPO.ExMCP do
+  defmodule MCPOban.ExMCP do
     @moduledoc """
     Runs ExMCP tool calls as Oban jobs.
 
     List your Oban workers as tools:
 
         defmodule MyApp.MCPServer do
-          use MCPO.ExMCP,
+          use MCPOban.ExMCP,
             tools: [
               MyApp.Workers.GenerateReport,
               {MyApp.Workers.SendEmail,
@@ -21,7 +21,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
 
     Each call of a tool inserts a job for its worker. The client gets the task
     at once. ExMCP then answers `tasks/get` and `tasks/cancel` from the
-    `mcpo_tasks` table.
+    `mcp_oban_tasks` table.
 
     ## Tool options
 
@@ -31,11 +31,11 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       * `:input_schema`: the JSON Schema of the tool arguments. The default
         accepts any object. The arguments become the job args.
 
-    MCPO checks the arguments against the input schema before it inserts a job.
+    MCPOban checks the arguments against the input schema before it inserts a job.
     Invalid arguments return a tool result with `"isError" => true`, and no job
     starts. An invalid schema raises at compile time.
 
-    A worker with `use MCPO.Tool` gives its own name, description (from
+    A worker with `use MCPOban.Tool` gives its own name, description (from
     `@moduledoc`) and input schema. The options in the `tools:` list override them.
 
     An Oban Pro worker with `args_schema` gets its input schema from it: field
@@ -44,10 +44,10 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
 
     ## Generated callbacks
 
-    `use MCPO.ExMCP` is `use ExMCP.Server.Handler` with `MCPO.ExMCP.Store` as
+    `use MCPOban.ExMCP` is `use ExMCP.Server.Handler` with `MCPOban.ExMCP.Store` as
     the task store. It defines `handle_initialize/2`, `handle_list_tools/2` and
     `handle_call_tool/3` for the listed tools. You can define them again, and
-    call `super/3` for the MCPO tools:
+    call `super/3` for the MCPOban tools:
 
         def handle_call_tool("echo", %{"text" => text}, state),
           do: {:ok, %{"content" => [%{"type" => "text", "text" => text}]}, state}
@@ -81,7 +81,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     ## Options
 
     Other `ExMCP.Server.Handler` options are passed on. Put store options in
-    `task_store_opts:`, for example `use MCPO.ExMCP, task_store_opts: [kill: true]`:
+    `task_store_opts:`, for example `use MCPOban.ExMCP, task_store_opts: [kill: true]`:
 
       * `:oban`: the Oban instance name.
       * `:job`: options for `c:Oban.Worker.new/2`.
@@ -92,14 +92,14 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
 
     ## Limits
 
-    The `input_required` status is not supported. MCPO does not publish
+    The `input_required` status is not supported. MCPOban does not publish
     `notifications/tasks`, so clients poll with `tasks/get`.
     """
 
     alias ExMCP.Content.SchemaValidator
     alias ExMCP.Tasks.Extension
-    alias MCPO.ExMCP.Store
-    alias MCPO.Task
+    alias MCPOban.ExMCP.Store
+    alias MCPOban.Task
 
     @default_wait_timeout 9_000
     @legacy_versions ~w(2025-11-25 2025-06-18 2025-03-26 2024-11-05)
@@ -107,28 +107,34 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     defmacro __using__(opts) do
       {tools, opts} = Keyword.pop(opts, :tools, [])
       {server_info, opts} = Keyword.pop(opts, :server_info)
-      handler_opts = Keyword.merge([tasks: :store, task_store: MCPO.ExMCP.Store], opts)
+      handler_opts = Keyword.merge([tasks: :store, task_store: MCPOban.ExMCP.Store], opts)
 
       quote do
         use ExMCP.Server.Handler, unquote(handler_opts)
 
-        import MCPO.ExMCP, only: [create_task: 4]
+        import MCPOban.ExMCP, only: [create_task: 4]
 
-        @mcpo_tools MCPO.ExMCP.__tools__(unquote(tools))
-        @mcpo_server_info unquote(server_info) ||
-                            %{"name" => inspect(__MODULE__), "version" => "1.0.0"}
+        @mcp_oban_tools MCPOban.ExMCP.__tools__(unquote(tools))
+        @mcp_oban_server_info unquote(server_info) ||
+                                %{"name" => inspect(__MODULE__), "version" => "1.0.0"}
 
         @impl ExMCP.Server.Handler
         def handle_initialize(params, state),
-          do: {:ok, MCPO.ExMCP.__initialize__(params, @mcpo_server_info), state}
+          do: {:ok, MCPOban.ExMCP.__initialize__(params, @mcp_oban_server_info), state}
 
         @impl ExMCP.Server.Handler
         def handle_list_tools(_cursor, state),
-          do: {:ok, MCPO.ExMCP.__list_tools__(@mcpo_tools), nil, state}
+          do: {:ok, MCPOban.ExMCP.__list_tools__(@mcp_oban_tools), nil, state}
 
         @impl ExMCP.Server.Handler
         def handle_call_tool(name, arguments, state) do
-          MCPO.ExMCP.__call_tool__(@mcpo_tools, name, arguments, state, __task_store_options__())
+          MCPOban.ExMCP.__call_tool__(
+            @mcp_oban_tools,
+            name,
+            arguments,
+            state,
+            __task_store_options__()
+          )
         end
 
         defoverridable handle_initialize: 2, handle_list_tools: 2, handle_call_tool: 3
@@ -138,7 +144,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @doc false
     @spec __tools__([module() | {module(), keyword()}]) :: [map()]
     def __tools__(tools) do
-      specs = MCPO.ToolSpec.build(tools)
+      specs = MCPOban.ToolSpec.build(tools)
       Enum.each(specs, &check_schema!/1)
       specs
     end
@@ -216,7 +222,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     """
     defmacro create_task(tool_name, worker, arguments, state) do
       quote do
-        MCPO.ExMCP.create_task(
+        MCPOban.ExMCP.create_task(
           unquote(tool_name),
           unquote(worker),
           unquote(arguments),
@@ -229,7 +235,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @doc """
     Creates a task for `worker`. `opts` are the task store options of the handler.
 
-    Use it when the handler does not `use MCPO.ExMCP`.
+    Use it when the handler does not `use MCPOban.ExMCP`.
     """
     @spec create_task(String.t(), module(), map(), term(), keyword()) ::
             {:ok, map(), term()} | {:error, term(), term()}
@@ -265,8 +271,8 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       ]
 
       with {:ok, %Task{task_id: task_id}} <-
-             MCPO.enqueue(worker, arguments, enqueue_opts ++ oban_opts) do
-        case MCPO.await(task_id, [timeout: timeout] ++ oban_opts) do
+             MCPOban.enqueue(worker, arguments, enqueue_opts ++ oban_opts) do
+        case MCPOban.await(task_id, [timeout: timeout] ++ oban_opts) do
           {:ok, task} ->
             tool_result(task)
 
@@ -282,7 +288,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @doc false
     @spec __timed_out__(String.t(), non_neg_integer(), keyword()) :: map()
     def __timed_out__(task_id, timeout, opts) do
-      case MCPO.__cancel_after_timeout__(task_id, Keyword.take(opts, [:oban, :kill])) do
+      case MCPOban.__cancel_after_timeout__(task_id, Keyword.take(opts, [:oban, :kill])) do
         {:cancelled, _task} ->
           tool_error("The task did not finish in #{timeout} ms and was cancelled.")
 
@@ -297,7 +303,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     defp tool_result(%Task{status: :completed} = task), do: Store.call_tool_result(task)
 
     defp tool_result(%Task{status: :failed, error: error}),
-      do: tool_error(MCPO.Status.error_message(error))
+      do: tool_error(MCPOban.Status.error_message(error))
 
     defp tool_result(%Task{status: :cancelled}), do: tool_error("The task was cancelled.")
 

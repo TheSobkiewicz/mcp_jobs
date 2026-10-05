@@ -1,12 +1,12 @@
-defmodule MCPO.ExMCPToolsTest do
-  use MCPO.DataCase
+defmodule MCPOban.ExMCPToolsTest do
+  use MCPOban.DataCase
 
-  alias MCPO.Test.{PlainWorker, SuccessWorker}
+  alias MCPOban.Test.{PlainWorker, SuccessWorker}
 
   defp start_client(protocol_mode) do
     {:ok, server} =
       ExMCP.Server.HandlerServer.start_link(
-        handler: MCPO.Test.MCPServer,
+        handler: MCPOban.Test.MCPServer,
         transport: :beam,
         protocol_mode: protocol_mode
       )
@@ -37,7 +37,7 @@ defmodule MCPO.ExMCPToolsTest do
                },
                %{
                  "name" => "hidden",
-                 "description" => "Runs MCPO.Test.HiddenDocWorker as a background job."
+                 "description" => "Runs MCPOban.Test.HiddenDocWorker as a background job."
                },
                %{"name" => "plain_worker", "inputSchema" => %{"type" => "object"}},
                %{
@@ -50,12 +50,12 @@ defmodule MCPO.ExMCPToolsTest do
     end
   end
 
-  test "MCPO.Tool keeps the moduledoc and the options of the worker" do
+  test "MCPOban.Tool keeps the moduledoc and the options of the worker" do
     assert [description: "Builds a summary.", input_schema: %{"type" => "object"} = _schema] =
-             Enum.sort(MCPO.Tool.options(MCPO.Test.DocumentedWorker))
+             Enum.sort(MCPOban.Tool.options(MCPOban.Test.DocumentedWorker))
 
-    assert [name: "hidden"] = MCPO.Tool.options(MCPO.Test.HiddenDocWorker)
-    assert [] = MCPO.Tool.options(PlainWorker)
+    assert [name: "hidden"] = MCPOban.Tool.options(MCPOban.Test.HiddenDocWorker)
+    assert [] = MCPOban.Tool.options(PlainWorker)
   end
 
   test "invalid arguments return an error result and start no job" do
@@ -67,12 +67,12 @@ defmodule MCPO.ExMCPToolsTest do
     assert text =~ "Invalid arguments: "
     assert text =~ "value"
     assert Repo.aggregate(Oban.Job, :count) == 0
-    assert Repo.aggregate(MCPO.Task, :count) == 0
+    assert Repo.aggregate(MCPOban.Task, :count) == 0
   end
 
   test "rejects an invalid input schema" do
-    assert_raise ArgumentError, ~r/invalid input schema for MCPO.Test.PlainWorker/, fn ->
-      MCPO.ExMCP.__tools__([{PlainWorker, input_schema: %{"type" => 5}}])
+    assert_raise ArgumentError, ~r/invalid input schema for MCPOban.Test.PlainWorker/, fn ->
+      MCPOban.ExMCP.__tools__([{PlainWorker, input_schema: %{"type" => 5}}])
     end
   end
 
@@ -84,19 +84,19 @@ defmodule MCPO.ExMCPToolsTest do
 
   test "initialize returns the tools capability" do
     assert %{"capabilities" => %{"tools" => %{}}, "protocolVersion" => "2025-06-18"} =
-             MCPO.ExMCP.__initialize__(%{"protocolVersion" => "2025-06-18"}, %{})
+             MCPOban.ExMCP.__initialize__(%{"protocolVersion" => "2025-06-18"}, %{})
 
     assert %{"protocolVersion" => "2025-11-25"} =
-             MCPO.ExMCP.__initialize__(%{"protocolVersion" => "1999-01-01"}, %{})
+             MCPOban.ExMCP.__initialize__(%{"protocolVersion" => "1999-01-01"}, %{})
   end
 
   test "rejects duplicate tool names and modules that are not workers" do
-    assert_raise ArgumentError, ~r/duplicate MCPO tool names/, fn ->
-      MCPO.ExMCP.__tools__([SuccessWorker, {PlainWorker, name: "success_worker"}])
+    assert_raise ArgumentError, ~r/duplicate MCPOban tool names/, fn ->
+      MCPOban.ExMCP.__tools__([SuccessWorker, {PlainWorker, name: "success_worker"}])
     end
 
     assert_raise ArgumentError, ~r/is not an Oban worker/, fn ->
-      MCPO.ExMCP.__tools__([MCPO.Task])
+      MCPOban.ExMCP.__tools__([MCPOban.Task])
     end
   end
 end
