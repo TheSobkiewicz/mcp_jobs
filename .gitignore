@@ -26,3 +26,6 @@ mcp_jobs-*.tar
 # Editor and language server files.
 .elixir_ls/
 .expert/
+
+# Local Claude Code files.
+/.claude/
