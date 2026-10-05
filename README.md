@@ -229,6 +229,33 @@ Listed tools have `"execution" => %{"taskSupport" => "optional"}`, so both kinds
 - The `input_required` status is not supported.
 - MCPO does not send `notifications/tasks`, so clients must poll with `tasks/get`.
 
+## Use with FastestMCP
+
+Add `{:fastest_mcp, "~> 0.3"}` to your deps. Then add your workers as tools:
+
+```elixir
+server =
+  FastestMCP.server("reports")
+  |> MCPO.FastestMCP.add_tools([
+    MyApp.Workers.GenerateReport,
+    {MyApp.Workers.SendEmail, description: "Sends an email."}
+  ])
+```
+
+The tool name, description and input schema follow the same rules as with ExMCP. FastestMCP checks the arguments against the input schema.
+
+Each tool call inserts an Oban job and waits for it. FastestMCP decides how the client gets the result:
+
+- A client with MCP Tasks gets a task at once. FastestMCP supports both task versions, `2025-11-25` and the `2026-07-28` extension, so clients with the current TypeScript SDK also get real tasks.
+- A client without tasks waits for the result. If the job does not finish in `:wait_timeout` (9 seconds by default), MCPO cancels it and returns an error result.
+- A failed or cancelled job returns a tool result with `isError: true`.
+
+When FastestMCP cancels a task, it stops the waiting tool process. MCPO then cancels the MCPO task and its job.
+
+Options of `add_tools/3`: `:oban`, `:job`, `:kill`, `:wait_timeout`, and `:task` (the FastestMCP task option, default `[mode: :optional]`).
+
+Limit: FastestMCP keeps its tasks in memory by default. After a restart, clients cannot read FastestMCP tasks from before the restart, even though the Oban job and the MCPO task still exist.
+
 ## Use without an MCP library
 
 ```elixir
@@ -326,6 +353,8 @@ mix run --no-halt serve.exs
 npx @modelcontextprotocol/inspector --cli http://localhost:4000/ --transport http \
   --method tools/call --tool-name generate_report --tool-arg steps=3
 ```
+
+The same worker with FastestMCP runs on port 4001: `mix run serve_fastest.exs`, then use `http://localhost:4001/mcp`.
 
 ## Development
 

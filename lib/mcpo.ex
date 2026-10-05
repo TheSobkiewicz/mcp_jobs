@@ -150,16 +150,34 @@ defmodule MCPO do
 
   ## Options
 
-    * `:timeout`: the maximum wait in milliseconds. The default is 5000.
+    * `:timeout`: the maximum wait in milliseconds, or `:infinity`. The default
+      is 5000.
     * `:interval`: the time between two status checks in milliseconds. The
       default is 100.
     * `:oban`: the Oban instance name.
   """
   @spec await(String.t(), keyword()) :: {:ok, Task.t()} | {:error, :not_found | :timeout}
   def await(task_id, opts \\ []) do
-    deadline = System.monotonic_time(:millisecond) + Keyword.get(opts, :timeout, 5_000)
+    deadline =
+      case Keyword.get(opts, :timeout, 5_000) do
+        :infinity -> :infinity
+        timeout -> System.monotonic_time(:millisecond) + timeout
+      end
 
     poll(task_id, deadline, Keyword.get(opts, :interval, 100), opts)
+  end
+
+  @doc false
+  # Ends a wait that timed out: cancels the task, or returns it when it
+  # finished between the last check and the cancel.
+  @spec __cancel_after_timeout__(String.t(), keyword()) ::
+          {:cancelled, Task.t()} | {:finished, Task.t()} | {:error, :not_found}
+  def __cancel_after_timeout__(task_id, opts) do
+    case cancel(task_id, opts) do
+      {:ok, task} -> {:cancelled, task}
+      {:error, :terminal} -> with {:ok, task} <- get(task_id, opts), do: {:finished, task}
+      {:error, :not_found} -> {:error, :not_found}
+    end
   end
 
   @doc """
@@ -227,6 +245,17 @@ defmodule MCPO do
 
       :noop ->
         :noop
+    end
+  end
+
+  defp poll(task_id, :infinity, interval, opts) do
+    case get(task_id, opts) do
+      {:ok, %Task{status: :working}} ->
+        Process.sleep(interval)
+        poll(task_id, :infinity, interval, opts)
+
+      result ->
+        result
     end
   end
 

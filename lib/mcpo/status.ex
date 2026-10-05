@@ -29,4 +29,9 @@ defmodule MCPO.Status do
 
   def to_map(%MCPO.Task{status: :failed, error: error}), do: %{status: :failed, error: error}
   def to_map(%MCPO.Task{status: status}), do: %{status: status}
+
+  @doc false
+  @spec error_message(map() | nil) :: String.t()
+  def error_message(%{"message" => message}) when is_binary(message), do: message
+  def error_message(_error), do: "Task failed"
 end

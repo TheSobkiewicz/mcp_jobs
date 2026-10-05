@@ -52,6 +52,9 @@ The plan and its decisions are in `docs/PLAN.md`.
 - `MCPO.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcpo, :task, ...]` events.
 - `MCPO.Application`: attaches the telemetry handler. It starts no processes.
 - `MCPO.ExMCP` and `MCPO.ExMCP.Store`: the ExMCP adapter. `use MCPO.ExMCP, tools: [Worker, ...]` generates the handler callbacks. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
+- `MCPO.FastestMCP`: the FastestMCP adapter (`add_tools/3`). Each tool inserts a job and waits for it; FastestMCP owns the MCP task. A watcher process cancels the MCPO task when FastestMCP kills the waiting tool. Also optional and inside `if Code.ensure_loaded?(...)`.
+- `MCPO.ToolSpec`: builds the tool list (name, description, input schema) for both adapters.
 - `examples/report_server`: an example app. Run `mix run demo.exs` in it to check the full flow with real Oban queues.
 - MCPO uses the repo of the Oban instance (`Oban.config/1`) and has no repo config of its own.
+- Tests that kill processes in the middle of a query use `@tag :unsandboxed` (see `test/support/data_case.ex`).
 - Tests need a local Postgres. `test/test_helper.exs` creates the `mcpo_test` database and runs the migrations.

@@ -22,26 +22,6 @@ defmodule MCPO.ExMCPFallbackTest do
     client
   end
 
-  defp run_jobs_in_background do
-    pid = spawn_link(&drain_loop/0)
-
-    fn ->
-      ref = Process.monitor(pid)
-      send(pid, :stop)
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
-    end
-  end
-
-  defp drain_loop do
-    receive do
-      :stop -> :ok
-    after
-      20 ->
-        drain()
-        drain_loop()
-    end
-  end
-
   for {mode, label} <- [prefer_modern: "a modern client", legacy_only: "a legacy client"] do
     test "#{label} without tasks gets the result directly" do
       client = start_client(unquote(mode), %{})

@@ -141,3 +141,9 @@ Still open (one reviewer each, confirmed by research): ExMCP adds `_request_id`/
 - `enqueue/3` returns `{:error, :already_exists}` for an existing `task_id` with another owner or worker.
 - When a job attempt fails or snoozes and its task is cancelled, the telemetry handler cancels the job.
 - A result is passed on as a tool result only when `"content"` is a list.
+
+## FastestMCP adapter (2026-10-05)
+
+`MCPO.FastestMCP.add_tools/3` adds one FastestMCP tool per worker. The tool handler inserts the job and waits for it (`MCPO.await/2`, `:infinity` for background tasks). FastestMCP owns the MCP task, supports Tasks v1 and v2, and handles clients without tasks. On `tasks/cancel`, FastestMCP kills the tool process; a watcher process then calls `MCPO.cancel/2`. The tool rules moved to `MCPO.ToolSpec` and are shared with the ExMCP adapter. Checked with the MCP Inspector over HTTP (`examples/report_server/serve_fastest.exs`).
+
+Limit: FastestMCP tasks are in memory, so they do not survive a restart, although the Oban job and the MCPO task do.

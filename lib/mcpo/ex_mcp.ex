@@ -138,13 +138,9 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @doc false
     @spec __tools__([module() | {module(), keyword()}]) :: [map()]
     def __tools__(tools) do
-      specs = Enum.map(tools, &tool_spec/1)
-      names = Enum.map(specs, fn %{name: name} -> name end)
-
-      case names -- Enum.uniq(names) do
-        [] -> specs
-        duplicates -> raise ArgumentError, "duplicate MCPO tool names: #{inspect(duplicates)}"
-      end
+      specs = MCPO.ToolSpec.build(tools)
+      Enum.each(specs, &check_schema!/1)
+      specs
     end
 
     @doc false
@@ -204,22 +200,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       "Invalid arguments: " <> details
     end
 
-    defp tool_spec(worker) when is_atom(worker), do: tool_spec({worker, []})
-
-    defp tool_spec({worker, opts}) when is_atom(worker) and is_list(opts) do
-      Code.ensure_compiled!(worker)
-
-      if not function_exported?(worker, :perform, 1) do
-        raise ArgumentError, "#{inspect(worker)} is not an Oban worker"
-      end
-
-      opts = Keyword.merge(MCPO.Tool.options(worker), opts)
-
-      input_schema =
-        Keyword.get_lazy(opts, :input_schema, fn ->
-          MCPO.ArgsSchema.from_worker(worker) || %{"type" => "object"}
-        end)
-
+    defp check_schema!(%{worker: worker, input_schema: input_schema}) do
       case SchemaValidator.compile_schema(input_schema) do
         {:ok, _compiled} ->
           :ok
@@ -227,21 +208,6 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
         {:error, reason} ->
           raise ArgumentError, "invalid input schema for #{inspect(worker)}: #{inspect(reason)}"
       end
-
-      %{
-        name: Keyword.get_lazy(opts, :name, fn -> default_name(worker) end),
-        worker: worker,
-        description:
-          Keyword.get(opts, :description, "Runs #{inspect(worker)} as a background job."),
-        input_schema: input_schema
-      }
-    end
-
-    defp default_name(worker) do
-      worker
-      |> Module.split()
-      |> List.last()
-      |> Macro.underscore()
     end
 
     @doc """
@@ -316,17 +282,12 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     @doc false
     @spec __timed_out__(String.t(), non_neg_integer(), keyword()) :: map()
     def __timed_out__(task_id, timeout, opts) do
-      oban_opts = Keyword.take(opts, [:oban])
-
-      case MCPO.cancel(task_id, Keyword.take(opts, [:oban, :kill])) do
-        {:ok, _task} ->
+      case MCPO.__cancel_after_timeout__(task_id, Keyword.take(opts, [:oban, :kill])) do
+        {:cancelled, _task} ->
           tool_error("The task did not finish in #{timeout} ms and was cancelled.")
 
-        {:error, :terminal} ->
-          case MCPO.get(task_id, oban_opts) do
-            {:ok, task} -> tool_result(task)
-            {:error, :not_found} -> tool_error("The task was not found.")
-          end
+        {:finished, task} ->
+          tool_result(task)
 
         {:error, :not_found} ->
           tool_error("The task was not found.")
@@ -336,7 +297,7 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
     defp tool_result(%Task{status: :completed} = task), do: Store.call_tool_result(task)
 
     defp tool_result(%Task{status: :failed, error: error}),
-      do: tool_error(Store.error_message(error))
+      do: tool_error(MCPO.Status.error_message(error))
 
     defp tool_result(%Task{status: :cancelled}), do: tool_error("The task was cancelled.")
 

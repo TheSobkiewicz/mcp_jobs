@@ -159,13 +159,9 @@ if Code.ensure_loaded?(ExMCP.Tasks.Store) do
       do: error
 
     defp rpc_error(%Task{status: :failed, error: error}) do
-      %{"code" => @internal_error, "message" => error_message(error)}
+      %{"code" => @internal_error, "message" => MCPO.Status.error_message(error)}
     end
 
     defp rpc_error(%Task{}), do: nil
-
-    @doc false
-    def error_message(%{"message" => message}) when is_binary(message), do: message
-    def error_message(_error), do: "Task failed"
   end
 end
