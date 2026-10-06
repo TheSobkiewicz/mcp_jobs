@@ -11,11 +11,11 @@ defmodule MCPJobs.MixProject do
       deps: deps(),
       description:
         "Turn Oban workers into MCP tools. Each tool call runs as an Oban job, and the client follows it as an MCP task.",
-      source_url: "https://github.com/TheSobkiewicz/mcp_jobs",
+      source_url: "https://github.com/software-mansion-labs/mcp_jobs",
       package: [
         licenses: ["MIT"],
         links: %{
-          "GitHub" => "https://github.com/TheSobkiewicz/mcp_jobs",
+          "GitHub" => "https://github.com/software-mansion-labs/mcp_jobs",
           "Changelog" => "https://hexdocs.pm/mcp_jobs/changelog.html"
         },
         files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
