@@ -14,7 +14,11 @@ defmodule MCPJobs.MixProject do
       source_url: "https://github.com/TheSobkiewicz/mcp_jobs",
       package: [
         licenses: ["MIT"],
-        links: %{"GitHub" => "https://github.com/TheSobkiewicz/mcp_jobs"}
+        links: %{
+          "GitHub" => "https://github.com/TheSobkiewicz/mcp_jobs",
+          "Changelog" => "https://hexdocs.pm/mcp_jobs/changelog.html"
+        },
+        files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
       ],
       docs: [
         main: "readme",
@@ -25,6 +29,7 @@ defmodule MCPJobs.MixProject do
           "guides/ex_mcp.md",
           "guides/fastest_mcp.md",
           "guides/operations.md",
+          "CHANGELOG.md",
           "LICENSE"
         ],
         groups_for_extras: [Guides: ~r/guides\//]

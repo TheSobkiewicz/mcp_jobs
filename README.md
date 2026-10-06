@@ -1,5 +1,7 @@
 # MCPJobs
 
+[![Version](https://img.shields.io/hexpm/v/mcp_jobs.svg)](https://hex.pm/packages/mcp_jobs)
+[![Hex Docs](https://img.shields.io/badge/documentation-gray.svg)](https://hexdocs.pm/mcp_jobs)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 MCPJobs is a small Elixir library that turns [Oban](https://hex.pm/packages/oban) workers into MCP tools. Each tool call becomes an Oban job, and the client follows it as an MCP task.
@@ -96,12 +98,12 @@ The MCP task status follows the Oban job state:
 
 ## Installation
 
-MCPJobs needs Oban with PostgreSQL. It is not on Hex yet, so install it from GitHub.
+MCPJobs needs Oban with PostgreSQL.
 
 ```elixir
 def deps do
   [
-    {:mcp_jobs, github: "TheSobkiewicz/mcp_jobs"},
+    {:mcp_jobs, "~> 0.1"},
     # Optional, for the ExMCP adapter:
     {:ex_mcp, "~> 1.5"}
   ]
