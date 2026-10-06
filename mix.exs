@@ -9,7 +9,8 @@ defmodule MCPJobs.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "Run MCP tool calls as Oban jobs, with MCP Tasks that follow the job state.",
+      description:
+        "Turn Oban workers into MCP tools. Each tool call runs as an Oban job, and the client follows it as an MCP task.",
       source_url: "https://github.com/TheSobkiewicz/mcp_jobs",
       package: [
         licenses: ["MIT"],
