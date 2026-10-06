@@ -12,28 +12,38 @@ With MCPJobs, the tool call gives back an MCP task at once, and Oban does the wo
 
 **No timeouts, no lost work**
 
-- The tool call returns a task ID at once. A 10-minute job does not keep a request open.
+- A client with MCP Tasks gets a task ID at once, so a 10-minute job does not keep a request open.
 - The work runs as an Oban job, with Oban queues, retries, and backoff.
-- Tasks are stored in PostgreSQL, so they survive restarts and deploys. Every node can read them.
+- Tasks are stored in PostgreSQL, so they survive restarts and deploys. Every node can read them. With FastestMCP, a task backend keeps the FastestMCP tasks too.
 
 **A task status you can trust**
 
 - **A retry does not fail the task.** The task fails only when Oban discards the job.
 - **No races.** Each status change is one conditional database update, so the first change wins. A task that completes while a client cancels it is never both.
-- **Self-repair.** If a node stops before MCPJobs saves the final state, the next read fixes the task from the Oban job.
+- **Self-repair.** If a node stops before MCPJobs saves the final state, the next read sets the task from the Oban job. A result that was not saved is lost: the task is then `completed` with no result.
+- **Safe duplicate requests.** The same task ID from the same owner returns the existing task. A unique index stops a second job, also for requests that arrive at the same time.
+- **Private tasks.** With ExMCP, each task belongs to its owner (principal, tenant, and audience). Other clients cannot read or cancel it.
 
 **Tools for long workers**
 
-- **Progress:** `MCPJobs.progress(job, 2, 5, "Rendering")` reaches the client as a status message and as notifications. The value never goes down, also after a retry.
-- **Cancellation:** a waiting job is cancelled in Oban. A running worker checks `MCPJobs.cancelled?(job)` and stops cleanly.
+- **Progress:** `MCPJobs.progress(job, 2, 5, "Rendering")` reaches the client as the task status message, for example `"Rendering (2/5)"`.
+- **Push notifications:** a client can listen for a task instead of polling. It gets `notifications/tasks` when the job reports progress, completes, fails, or is cancelled.
+- **Cancellation:** a waiting job is cancelled in Oban. A running worker checks `MCPJobs.cancelled?(job)` and stops cleanly. `MCPJobs.cancel(task_id, kill: true)` stops a running job at once.
 - **Safe errors:** the client gets only the error message. The details stay on the server.
 
 **Easy to adopt**
 
-- **Plain Oban workers.** They do not need to know about MCP. The `perform/1` return value becomes the task result. Oban Web still shows every job.
+- **Plain Oban workers.** They do not need to know about MCP. The `perform/1` return value becomes the task result. Oban Web still shows every job. The same worker also runs as a normal Oban job: outside MCP, `MCPJobs.progress/4` and `MCPJobs.cancelled?/1` do nothing.
 - **Tool list from your code.** The `@moduledoc` becomes the tool description. The input schema comes from the tool options or from an Oban Pro args schema. Oban Pro is not required.
-- **Works with older clients.** A client without MCP Tasks gets the result directly. The work still runs in Oban.
-- **Small.** It does not implement the MCP protocol. It plugs into [ExMCP](https://hex.pm/packages/ex_mcp) or [FastestMCP](https://hex.pm/packages/fastest_mcp), and the core API works without an MCP library. It starts no processes and has no repo config of its own.
+- **Arguments are checked first.** Invalid arguments get an error result with a list of the problems at once, so the AI can correct its call. No job starts.
+- **Works with current and older clients.** It supports the current MCP protocol (`2026-07-28`) and is tested with Claude Code. A client without MCP Tasks gets the result directly. The work still runs in Oban.
+- **Quick setup.** `mix mcp_jobs.install` creates the migration and the MCP server, with matching time limits. `--phoenix` also adds the route.
+- **Small.** It does not implement the MCP protocol. It plugs into [ExMCP](https://hex.pm/packages/ex_mcp) or [FastestMCP](https://hex.pm/packages/fastest_mcp), and the core API works without an MCP library. It has no repo config of its own.
+
+**Ready for production**
+
+- **Telemetry:** `[:mcp_jobs, :task, ...]` events for started, progress, completed, failed, and cancelled tasks.
+- **Cleanup:** `MCPJobs.Cleaner` deletes old finished tasks. It runs with the Oban Cron plugin.
 
 ## Usage
 

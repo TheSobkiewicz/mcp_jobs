@@ -45,7 +45,7 @@ A small Elixir library that connects MCP Tasks to Oban jobs. An MCP tool puts it
 - `MCPJobs.Repository`: all queries. A status change is a conditional update (`WHERE status = 'working'`), so the first change wins.
 - Workers are plain `Oban.Worker` modules. `MCPJobs.Telemetry` saves the `perform/1` return value as the task result. `use MCPJobs.Tool` in a worker is optional: it keeps `@moduledoc` and the tool options in `__mcp_jobs_tool__/0` at compile time, because `Code.fetch_docs/1` does not work during compilation and releases strip docs.
 - `MCPJobs.Telemetry`: listens to Oban job events and sets `completed`, `failed` or `cancelled`. It also sends `[:mcp_jobs, :task, ...]` events, including `:progress`. The metadata has `:oban`, the Oban instance name.
-- `MCPJobs.Application`: attaches the telemetry handlers. It starts no processes.
+- `MCPJobs.Application`: attaches the telemetry handlers. Its supervisor has no children.
 - `MCPJobs.ExMCP.Notifications`: a telemetry handler that publishes `notifications/tasks` for tasks of `MCPJobs.ExMCP.Store` (meta `"ex_mcp" => true`) to ExMCP listeners.
 - `MCPJobs.ExMCP` and `MCPJobs.ExMCP.Store`: the ExMCP adapter. `use MCPJobs.ExMCP, tools: [Worker, ...]` generates the handler callbacks. `ex_mcp` is an optional dependency, so both modules are inside `if Code.ensure_loaded?(...)`. Keep them out of the core modules.
 - `MCPJobs.FastestMCP`: the FastestMCP adapter (`add_tools/3`). Each tool inserts a job and waits for it; FastestMCP owns the MCP task. A watcher process cancels the MCPJobs task when FastestMCP kills the waiting tool. Also optional and inside `if Code.ensure_loaded?(...)`.
